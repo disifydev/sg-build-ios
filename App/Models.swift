@@ -498,7 +498,5 @@ func parseISO(_ s: String?) -> Date? {
     isoLock.unlock()
     return d
 }
-    return isoFrac.date(from: s) ?? isoPlain.date(from: s)
-}
 
 func isoString(_ d: Date) -> String { isoFrac.string(from: d) }
