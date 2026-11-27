@@ -193,16 +193,16 @@ jobs:
       - name: Снимок 34-chat-pin (закрепить у себя или у обоих)
         timeout-minutes: 2
         run: bash tools/shot.sh 34-chat-pin -fixture -screen chat-pin
-      - name: Снимок 35-client-media (материалы: медиа)
+      - name: Снимок 35-client-media (материалы, медиа)
         timeout-minutes: 2
         run: bash tools/shot.sh 35-client-media -fixture -screen client-materials -bottom
-      - name: Снимок 36-client-files (материалы: файлы)
+      - name: Снимок 36-client-files (материалы, файлы)
         timeout-minutes: 2
         run: bash tools/shot.sh 36-client-files -fixture -screen client-materials -bottom -mtab files
-      - name: Снимок 37-client-links (материалы: ссылки)
+      - name: Снимок 37-client-links (материалы, ссылки)
         timeout-minutes: 2
         run: bash tools/shot.sh 37-client-links -fixture -screen client-materials -bottom -mtab links
-      - name: Снимок 38-client-voice (материалы: голосовые)
+      - name: Снимок 38-client-voice (материалы, голосовые)
         timeout-minutes: 2
         run: bash tools/shot.sh 38-client-voice -fixture -screen client-materials -bottom -mtab voice
 
