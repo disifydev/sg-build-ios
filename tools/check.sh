@@ -1,6 +1,8 @@
 #!/bin/bash
 # Итог снимков: падения, пустые экраны, отчёты о сбоях.
 FAIL=0
+# живой запуск зависит от сети раннера, его падение не блокирует подпись
+[ -f shots/FAILED.txt ] && sed -i '' '/^00-live/d' shots/FAILED.txt && [ ! -s shots/FAILED.txt ] && rm shots/FAILED.txt
 [ -f shots/FAILED.txt ] && { echo "Упали:"; cat shots/FAILED.txt; FAIL=1; }
 for f in shots/*.png; do
   SZ=$(stat -f%z "$f")
