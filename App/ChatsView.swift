@@ -478,7 +478,7 @@ struct ChatRow: View {
                     HStack(spacing: 6) {
                         FolderTag(folder: store.folder(contact?.folderId))
                         ForEach(Array((contact?.tags ?? []).prefix(2)), id: \.self) { t in
-                            Text(t).font(Typo.body(11, .medium)).foregroundStyle(Pal.fg.opacity(0.78))
+                            Text(tagTitle(t)).font(Typo.body(11, .medium)).foregroundStyle(Pal.fg.opacity(0.78))
                                 .padding(.horizontal, 8).padding(.vertical, 2)
                                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Pal.fg.opacity(0.08)))
                                 .lineLimit(1)

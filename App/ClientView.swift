@@ -300,7 +300,7 @@ struct ClientView: View {
 
                     Cap("Метки")
                     FlowLayout(spacing: 8) {
-                        ForEach(store.labels, id: \.self) { l in
+                        ForEach(store.labels.filter { tagIcon($0) == nil }, id: \.self) { l in
                             let on = (c.tags ?? []).contains(l)
                             Chip(text: on ? l + "  ✕" : l, on: false, height: 32, fontSize: 13, fill: on ? labelColor(l) : nil) { toggleTag(c, l) }
                                 .accessibilityLabel(on ? "Метка \(l), нажми, чтобы снять" : "Метка \(l), нажми, чтобы поставить")

@@ -75,6 +75,17 @@ jobs:
           xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
           xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/$SCHEME.app
 
+      - name: Прогрев симулятора (первые запуски после установки медленные)
+        timeout-minutes: 4
+        continue-on-error: true
+        run: |
+          UDID=$(cat .udid)
+          for i in 1 2; do
+            perl -e 'alarm shift; exec @ARGV' 90 xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID" -fixture -login || true
+            sleep 8
+          done
+          xcrun simctl terminate "$UDID" "$BUNDLE_ID" || true
+
       - name: Снимок 00-live (живой запуск без данных, сервер отвечает 401 и открывается вход)
         timeout-minutes: 2
         continue-on-error: true

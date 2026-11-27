@@ -500,3 +500,17 @@ func parseISO(_ s: String?) -> Date? {
 }
 
 func isoString(_ d: Date) -> String { isoFrac.string(from: d) }
+
+/// Метка для показа: «класс:9» → «9 класс», «группа:ЕГЭ» → «ЕГЭ».
+func tagTitle(_ t: String) -> String {
+    if t.hasPrefix("класс:") { return String(t.dropFirst(6)) + " класс" }
+    if t.hasPrefix("группа:") { return String(t.dropFirst(7)) }
+    return t
+}
+
+/// Значок служебной метки: класс или группа.
+func tagIcon(_ t: String) -> String? {
+    if t.hasPrefix("класс:") { return "graduationcap.fill" }
+    if t.hasPrefix("группа:") { return "person.3.fill" }
+    return nil
+}

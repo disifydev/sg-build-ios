@@ -294,7 +294,7 @@ struct ChatView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 12)
-                .padding(.top, 150)
+                .padding(.top, conv.pins.isEmpty ? 150 : 204)
                 .padding(.bottom, bottomH > 0 ? bottomH + 12 : 96 + extra)
                 .animation(.spring(response: 0.35, dampingFraction: 0.85), value: msgs.count)
             }
@@ -444,7 +444,7 @@ struct ChatView: View {
         .padding(.horizontal, 14)
         .padding(.top, 8)
         .padding(.bottom, 14)
-        .background(LinearGradient(colors: [Pal.page.opacity(0.92), Pal.page.opacity(0)], startPoint: .top, endPoint: .bottom).ignoresSafeArea(edges: .top))
+        .background(LinearGradient(stops: [.init(color: Pal.page.opacity(0.97), location: 0), .init(color: Pal.page.opacity(0.85), location: 0.55), .init(color: Pal.page.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom).ignoresSafeArea(edges: .top))
     }
 
     /// Закреплённое сообщение: нажатие — к сообщению, крестик — открепить.
@@ -471,11 +471,12 @@ struct ChatView: View {
     /// Метка в шапке: крестик снимает её с клиента (с «Отменить»).
     private func tagChip(_ t: String, contact: Contact) -> some View {
         HStack(spacing: 4) {
-            Text(t).font(Typo.body(13, .semibold)).lineLimit(1)
+            if let ic = tagIcon(t) { Image(systemName: ic).font(.system(size: 11, weight: .semibold)) }
+            Text(tagTitle(t)).font(Typo.body(13, .semibold)).lineLimit(1)
             Button { removeTag(t, contact) } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).frame(width: 18, height: 18).contentShape(Rectangle())
             }
-            .accessibilityLabel("Снять метку \(t)")
+            .accessibilityLabel("Снять метку \(tagTitle(t))")
         }
         .foregroundStyle(Pal.ink)
         .padding(.leading, 12).padding(.trailing, 6)
@@ -488,7 +489,7 @@ struct ChatView: View {
         var tags = c.tags ?? []
         tags.removeAll { $0 == t }
         let body: [String: Any] = ["type": "updateContact", "contactId": c.id, "tags": tags]
-        Task { await store.perform([body], contactId: c.id, ok: "Метка «\(t)» снята") }
+        Task { await store.perform([body], contactId: c.id, ok: "Метка «\(tagTitle(t))» снята") }
     }
 
     private func done(_ r: Reminder, _ contactId: String) {
@@ -740,6 +741,7 @@ struct ChatView: View {
             Circle().fill(Pal.danger).frame(width: 10, height: 10)
                 .opacity(Int(recElapsed * 2) % 2 == 0 ? 1 : 0.35)
             Text(durationTenths(recElapsed)).font(Typo.body(15, .medium)).monospacedDigit().foregroundStyle(Pal.fg)
+                .lineLimit(1).fixedSize()
             if notePhase == .idle {
                 LevelBars(levels: recorder.levels, count: 14).opacity(1 - cancelProgress)
             }
@@ -799,7 +801,8 @@ struct ChatView: View {
             Circle().fill(Pal.danger).frame(width: 9, height: 9)
                 .opacity(Int(recorder.elapsed * 2) % 2 == 0 ? 1 : 0.35)
             Text(durationTenths(recorder.elapsed)).font(Typo.body(15, .medium)).monospacedDigit().foregroundStyle(Pal.fg)
-            LevelBars(levels: recorder.levels, count: 18).opacity(recorder.paused ? 0.4 : 1)
+                .lineLimit(1).fixedSize()
+            LevelBars(levels: recorder.levels, count: 12).opacity(recorder.paused ? 0.4 : 1).clipped()
             Spacer(minLength: 0)
             Button { recorder.togglePause() } label: {
                 Image(systemName: recorder.paused ? "mic.fill" : "pause.fill").font(.system(size: 14)).foregroundStyle(Pal.fg).frame(width: 34, height: 34)
@@ -875,11 +878,12 @@ struct ChatView: View {
         }
         .frame(width: 44, height: 44)
         .background(Circle().fill(recording ? Pal.danger : (filled ? Pal.acc : .clear)))
-        .scaleEffect(recording ? 1.25 : 1)
-        .offset(x: recording ? min(0, dragX) : 0, y: recording ? min(0, dragY) : 0)
         .contentTransition(.symbolEffect(.replace))
         .contentShape(Circle())
         .glass(.light, in: Circle(), interactive: true)
+        // стекло двигается вместе с кнопкой: без «второго кружка» за красным микрофоном
+        .scaleEffect(recording ? 1.25 : 1)
+        .offset(x: recording ? min(0, dragX) : 0, y: recording ? min(0, dragY) : 0)
         .gesture(holdGesture(conv, canNote: canNote, sendMode: sendMode, hasText: hasText))
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: sendMode)
         .animation(.spring(response: 0.25, dampingFraction: 0.75), value: phase)

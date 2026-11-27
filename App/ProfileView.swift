@@ -12,7 +12,7 @@ struct ProfileView: View {
     /// «5 папок · 3 метки» вместо голой цифры.
     private var foldersSummary: String {
         let f: String = ruCount(store.folders.count, "папка", "папки", "папок")
-        let n: Int = store.labels.count
+        let n: Int = store.labels.filter { tagIcon($0) == nil }.count
         return n > 0 ? f + " · " + ruCount(n, "метка", "метки", "меток") : f
     }
 
@@ -354,7 +354,7 @@ struct FoldersView: View {
 
                     Cap("Метки")
                     FlowLayout(spacing: 8) {
-                        ForEach(store.labels, id: \.self) { l in
+                        ForEach(store.labels.filter { tagIcon($0) == nil }, id: \.self) { l in
                             HStack(spacing: 4) {
                                 Text(l).font(Typo.body(13, .semibold))
                                 Button { askRemove(l) } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).frame(width: 20, height: 20) }
