@@ -166,26 +166,39 @@ extension Store {
 
     /// Реакция (только Telegram и WhatsApp): одна наша на сообщение, повтор снимает.
     func react(_ convId: String, _ m: Message, _ emoji: String?) {
+        // та же реакция уже стоит — повторное нажатие снимает её (иначе Telegram отвечает MESSAGE_NOT_MODIFIED)
+        let current: String? = messages(convId).first { $0.id == m.id }?.reactions?.first { $0.mine }?.emoji
+        var target: String? = emoji
+        if let e = emoji, e == current { target = nil }
+        if target == nil && current == nil { return }
+        guard !reacting.contains(m.id) else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             patchMessage(convId, m.id) { msg in
                 var rx = (msg.reactions ?? []).filter { !$0.mine }
-                if let emoji { rx.append(Reaction(emoji: emoji, mine: true)) }
+                if let target { rx.append(Reaction(emoji: target, mine: true)) }
                 msg.reactions = rx
             }
         }
         haptic(.medium)
         guard !fixture else { return }
+        reacting.insert(m.id)
         Task {
+            defer { reacting.remove(m.id) }
             do {
-                let r = try await API.post(ActionResponse.self, "/api/messages/react/", json: ["messageId": m.id, "emoji": emoji.map { $0 as Any } ?? NSNull()])
+                let r = try await API.post(ActionResponse.self, "/api/messages/react/", json: ["messageId": m.id, "emoji": target.map { $0 as Any } ?? NSNull()])
                 state = r.state
                 etag = nil
-            } catch { show(friendly(error), ok: false) }
+            } catch {
+                // сырой текст ошибки не показываем; вид реакции возвращаем с сервера
+                show("Не получилось поставить реакцию. Попробуй ещё раз", ok: false)
+                await loadState(force: true)
+            }
         }
     }
 
     /// Закрепить сообщение в чате (плашка сверху). В Telegram по QR — и в самом мессенджере.
-    func pinMessage(_ convId: String, _ m: Message, _ on: Bool) {
+    /// both: закрепить и у собеседника (в Telegram — без pm_oneside); false — только у себя.
+    func pinMessage(_ convId: String, _ m: Message, _ on: Bool, both: Bool = true) {
         if let i = state.conversations.firstIndex(where: { $0.id == convId }) {
             var pins = state.conversations[i].pins.filter { $0 != m.id }
             if on { pins.insert(m.id, at: 0) }
@@ -193,11 +206,11 @@ extension Store {
             meta["pins"] = pins.joined(separator: ",")
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { state.conversations[i].meta = meta }
         }
-        show(on ? "Сообщение закреплено" : "Сообщение откреплено")
+        show(on ? (both ? "Закреплено у вас и у собеседника" : "Закреплено у вас") : "Сообщение откреплено")
         guard !fixture else { return }
         Task {
             do {
-                let r = try await API.post(ActionResponse.self, "/api/messages/pin/", json: ["messageId": m.id, "on": on])
+                let r = try await API.post(ActionResponse.self, "/api/messages/pin/", json: ["messageId": m.id, "on": on, "both": both])
                 state = r.state
                 etag = nil
             } catch { show(friendly(error), ok: false) }
@@ -545,9 +558,43 @@ extension Store {
         }
     }
 
+    /// Смена темы: снимок окна ложится сверху и плавно растворяется (~0,35 с), под ним тема меняется сразу — без мигания.
     func setTheme(_ t: ThemeMode) {
-        withAnimation(.easeInOut(duration: 0.3)) { theme = t }
+        guard t != theme else { return }
+        let win = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }
+        let snap = win?.snapshotView(afterScreenUpdates: false)
+        if let win, let snap {
+            snap.frame = win.bounds
+            snap.isUserInteractionEnabled = false
+            win.addSubview(snap)
+        }
+        theme = t
         UserDefaults.standard.set(t.rawValue, forKey: "theme")
+        guard let snap else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut, .allowUserInteraction], animations: { snap.alpha = 0 },
+                           completion: { _ in snap.removeFromSuperview() })
+        }
+    }
+
+    // MARK: - согласие на ИИ
+
+    /// Согласие на отправку текста и голосовых в ИИ-сервисы: спрашиваем при первом использовании перевода или расшифровки.
+    func ensureAI(askAgain: Bool) async -> Bool {
+        if aiConsent == true { return true }
+        if aiConsent == false && !askAgain { return false }
+        if aiAsking { return false }
+        aiAsking = true
+        return await withCheckedContinuation { c in aiContinuation = c }
+    }
+
+    func answerAI(_ ok: Bool) {
+        guard let c = aiContinuation else { aiAsking = false; return }
+        aiContinuation = nil
+        aiAsking = false
+        aiConsent = ok
+        UserDefaults.standard.set(ok, forKey: "aiConsent")
+        c.resume(returning: ok)
     }
 
     var colorScheme: ColorScheme? {

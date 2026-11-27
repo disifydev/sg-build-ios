@@ -63,6 +63,12 @@ final class Store {
     // данные новых функций кабинета
     var typing: [String: TypingInfo] = [:]
     var presence: [String: Presence] = [:]
+    /// сообщения, у которых реакция сейчас уходит на сервер (двойной вызов Telegram отвечает MESSAGE_NOT_MODIFIED)
+    var reacting = Set<String>()
+    /// согласие на отправку текста и голосовых в ИИ-сервисы: nil — ещё не спрашивали
+    var aiConsent: Bool? = UserDefaults.standard.object(forKey: "aiConsent") as? Bool
+    var aiAsking = false
+    @ObservationIgnored var aiContinuation: CheckedContinuation<Bool, Never>?
     var serverDrafts: [String: String] = [:]
     var scheduled: [String: [ScheduledMessage]] = [:]
     var lessons: [Lesson] = []
@@ -328,7 +334,7 @@ final class Store {
             json["attachments"] = items
         }
         if let replyTo { json["replyTo"] = replyTo }
-        if translate && translateOut && translateOn && !text.isEmpty { json["translate"] = true }
+        if translate && translateOut && translateOn && aiConsent == true && !text.isEmpty { json["translate"] = true }
         do {
             let r = try await API.post(ActionResponse.self, "/api/messages/send/", json: json)
             apply(r.state)
@@ -342,7 +348,7 @@ final class Store {
 
     /// Перевести входящие диалога на язык менеджера (POST /api/translate — сервер переводит только непереведённое, с кэшем).
     func translateIncoming(_ convId: String) async {
-        guard !fixture, translateOn else { return }
+        guard !fixture, translateOn, aiConsent == true else { return }
         if let r = try? await API.post(ActionResponse.self, "/api/translate/", json: ["conversationId": convId]) {
             apply(r.state)
             etag = nil
@@ -360,6 +366,7 @@ final class Store {
             transcripts[messageId] = t
             return t
         }
+        guard await ensureAI(askAgain: true) else { return nil }
         do {
             let t = try await API.post(Transcript.self, "/api/media/transcribe/", json: ["messageId": messageId])
             transcripts[messageId] = t

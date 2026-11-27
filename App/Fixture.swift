@@ -147,8 +147,9 @@ enum Fixture {
                 s.chatSelecting = true
                 s.chatSelected = ["v1", "v4"]
                 s.chatBatchFolderSheet = true
-            case "chat-tg", "chat-reply", "chat-voice", "chat-preview", "viewer", "note", "note-rec", "note-lock", "chat-voice-rec": s.chatsPath = [.chat("v0")]
+            case "chat-tg", "chat-draft", "chat-sched", "chat-scheduled", "chat-pin", "chat-reply", "chat-voice", "chat-preview", "viewer", "note", "note-rec", "note-lock", "chat-voice-rec": s.chatsPath = [.chat("v0")]
             case "client": s.chatsPath = [.client("c5")]
+            case "client-materials": s.chatsPath = [.client("c0")]
             case "folders": s.tab = .profile; s.profilePath = [.folders]
             case "partners": s.tab = .profile; s.profilePath = [.partners]
             case "archive": s.chatsPath = [.archive]
@@ -195,6 +196,10 @@ enum Fixture {
         var v2 = Message(id: "m0_7", dir: "in", text: "", at: ago(48), author: nil, attachments: [voice2], translation: nil)
         v2.transcript = Transcript(text: "И ещё вопрос: в группе сколько человек? Хочу, чтобы было не больше восьми.", lang: "ru")
         out.append(v2)
+        // документ и ссылка — для «Материалов» в карточке клиента
+        let doc = Attachment(kind: "file", name: "Программа курса.pdf", url: "fixture:doc", mediaId: nil, mime: "application/pdf", round: nil)
+        out.append(Message(id: "m0_0a", dir: "out", text: "Программа курса", at: ago(94), author: "Вы", attachments: [doc], translation: nil))
+        out.append(Message(id: "m0_0b", dir: "out", text: "Подробнее на сайте: https://sguardo.ru/ege", at: ago(93), author: "Вы", attachments: nil, translation: nil))
         return out
     }
 }

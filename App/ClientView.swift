@@ -227,6 +227,43 @@ struct ClientView: View {
                     }
                     .padding(.top, 18)
 
+                    Cap("Класс и группа")
+                    VStack(alignment: .leading, spacing: 10) {
+                        FlowLayout(spacing: 8) {
+                            ForEach(store.classes, id: \.self) { k in
+                                let on = c.classes.contains(k)
+                                Chip(text: classTitle(k), on: on, height: 32, fontSize: 13) { store.setClass(c.id, on ? nil : k) }
+                            }
+                            addChip("class", "+ Класс")
+                        }
+                        FlowLayout(spacing: 8) {
+                            ForEach(store.groups, id: \.self) { g in
+                                let on = c.groups.contains(g)
+                                Chip(text: g, dot: Pal.lav, on: on, height: 32, fontSize: 13) { store.setCollection(c.id, kind: "group", name: g, on: !on) }
+                            }
+                            addChip("group", "+ Группа")
+                        }
+                        if let kind = newCollection {
+                            HStack(spacing: 8) {
+                                TextField("", text: $collectionName, prompt: Text(kind == "class" ? "Например, 9 или 9 класс" : "Например, Мини-группа ЕГЭ").foregroundColor(Pal.fg3))
+                                    .font(Typo.body(15)).foregroundStyle(Pal.fg)
+                                    .submitLabel(.done)
+                                    .onSubmit { addCollection(c, kind) }
+                                Button { addCollection(c, kind) } label: {
+                                    Text("Добавить").font(Typo.body(14, .semibold)).padding(.horizontal, 14).frame(height: 34).primaryFill(17)
+                                }
+                                .buttonStyle(PressStyle())
+                            }
+                            .padding(.horizontal, 12).frame(height: 46)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Pal.fill))
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassRect(24)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: newCollection)
+
                     Cap("Статистика")
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         Tile(label: "сообщений", value: "\(msgs.count + older)")
@@ -320,43 +357,6 @@ struct ClientView: View {
                     findingsBlock(c)
                     mergeBlock(c)
 
-                    Cap("Класс и группы")
-                    VStack(alignment: .leading, spacing: 10) {
-                        FlowLayout(spacing: 8) {
-                            ForEach(store.classes, id: \.self) { k in
-                                let on = c.classes.contains(k)
-                                Chip(text: classTitle(k), on: on, height: 32, fontSize: 13) { store.setClass(c.id, on ? nil : k) }
-                            }
-                            addChip("class", "+ Класс")
-                        }
-                        FlowLayout(spacing: 8) {
-                            ForEach(store.groups, id: \.self) { g in
-                                let on = c.groups.contains(g)
-                                Chip(text: g, dot: Pal.lav, on: on, height: 32, fontSize: 13) { store.setCollection(c.id, kind: "group", name: g, on: !on) }
-                            }
-                            addChip("group", "+ Группа")
-                        }
-                        if let kind = newCollection {
-                            HStack(spacing: 8) {
-                                TextField("", text: $collectionName, prompt: Text(kind == "class" ? "Например, 9 или 9 класс" : "Например, Мини-группа ЕГЭ").foregroundColor(Pal.fg3))
-                                    .font(Typo.body(15)).foregroundStyle(Pal.fg)
-                                    .submitLabel(.done)
-                                    .onSubmit { addCollection(c, kind) }
-                                Button { addCollection(c, kind) } label: {
-                                    Text("Добавить").font(Typo.body(14, .semibold)).padding(.horizontal, 14).frame(height: 34).primaryFill(17)
-                                }
-                                .buttonStyle(PressStyle())
-                            }
-                            .padding(.horizontal, 12).frame(height: 46)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Pal.fill))
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassRect(24)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: newCollection)
-
                     Cap("Напоминание")
                     Group {
                         if let rem {
@@ -447,6 +447,8 @@ struct ClientView: View {
                     }
                     .glassRect(24)
 
+                    ClientMaterials(contactId: c.id).padding(.top, 22)
+
                     VStack(spacing: 0) {
                         Button { blockAsk = true } label: {
                             GroupRow(first: true) {
@@ -465,6 +467,7 @@ struct ClientView: View {
                 .padding(.bottom, 40)
             }
             .scrollDismissesKeyboard(.interactively)
+            .defaultScrollAnchor(ProcessInfo.processInfo.arguments.contains("-bottom") ? .bottom : .top)
             .refreshable { await store.loadState(force: true) }
         }
         .toolbar {

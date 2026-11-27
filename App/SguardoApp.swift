@@ -47,6 +47,9 @@ struct SguardoApp: App {
 
 struct RootView: View {
     @Environment(Store.self) private var store
+    private var aiBinding: Binding<Bool> {
+        Binding(get: { store.aiAsking }, set: { if !$0, store.aiContinuation != nil { store.answerAI(false) } })
+    }
 
     var body: some View {
         ZStack {
@@ -72,6 +75,12 @@ struct RootView: View {
         }
         .animation(.spring(response: 0.45, dampingFraction: 0.85), value: store.phase)
         .animation(.easeInOut(duration: 0.25), value: store.locked)
+        .confirmationDialog("Отправлять сообщения в ИИ-сервисы?", isPresented: aiBinding, titleVisibility: .visible) {
+            Button("Разрешить") { store.answerAI(true) }
+            Button("Не разрешать", role: .cancel) { store.answerAI(false) }
+        } message: {
+            Text("Для перевода и расшифровки текст сообщений и звук голосовых передаются сторонним ИИ-сервисам: Google (Gemini), DeepL, Groq, Cerebras, Mistral, OpenRouter, Anthropic. Без разрешения перевода и расшифровки не будет.")
+        }
     }
 }
 

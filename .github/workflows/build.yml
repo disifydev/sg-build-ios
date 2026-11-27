@@ -181,6 +181,31 @@ jobs:
         timeout-minutes: 2
         run: bash tools/shot.sh 30-staff -fixture -screen staff
 
+      - name: Снимок 31-chat-draft (часы в поле ввода)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 31-chat-draft -fixture -screen chat-draft
+      - name: Снимок 32-chat-sched (лист отложенной отправки)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 32-chat-sched -fixture -screen chat-sched
+      - name: Снимок 33-chat-scheduled (список запланированных)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 33-chat-scheduled -fixture -screen chat-scheduled
+      - name: Снимок 34-chat-pin (закрепить у себя или у обоих)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 34-chat-pin -fixture -screen chat-pin
+      - name: Снимок 35-client-media (материалы: медиа)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 35-client-media -fixture -screen client-materials -bottom
+      - name: Снимок 36-client-files (материалы: файлы)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 36-client-files -fixture -screen client-materials -bottom -mtab files
+      - name: Снимок 37-client-links (материалы: ссылки)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 37-client-links -fixture -screen client-materials -bottom -mtab links
+      - name: Снимок 38-client-voice (материалы: голосовые)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 38-client-voice -fixture -screen client-materials -bottom -mtab voice
+
       - name: Снимки для App Store (6.9 дюйма)
         timeout-minutes: 8
         run: bash tools/appstore.sh

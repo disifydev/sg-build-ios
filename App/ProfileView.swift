@@ -5,7 +5,6 @@ struct ProfileView: View {
     @State private var showDelete = false
     @State private var confirmLogout = false
 
-    @State private var aiAsk = false
 
     @State private var modules: CabinetModules.Flags?
 
@@ -121,23 +120,6 @@ struct ProfileView: View {
                 }
                 .glassRect(24)
 
-                Cap("ИИ-помощник")
-                VStack(spacing: 0) {
-                    GroupRow(first: true) {
-                        RowIcon(system: "sparkle", color: Pal.acc)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Перевод и расшифровка через ИИ").foregroundStyle(Pal.fg)
-                            Text("текст и голосовые уходят в ИИ-сервисы").font(Typo.body(12)).foregroundStyle(Pal.fg3)
-                        }
-                        Spacer()
-                        GlassSwitch(isOn: Binding(get: { store.translateOn }, set: { on in
-                            if store.user?.isOwner != true { store.show("Это включает владелец кабинета", ok: false); return }
-                            if on { aiAsk = true } else { Task { await store.setTranslate(false) } }
-                        }))
-                    }
-                }
-                .glassRect(24)
-
                 Cap("Подключённые аккаунты")
                 VStack(spacing: 0) {
                     if store.state.channels.isEmpty {
@@ -201,12 +183,6 @@ struct ProfileView: View {
         .refreshable { await store.loadState(force: true); await store.loadAccount() }
         .screenBackground(store.wall)
         .sheet(isPresented: $showDelete) { DeleteSheet() }
-        .confirmationDialog("Разрешить отправку в ИИ-сервисы?", isPresented: $aiAsk, titleVisibility: .visible) {
-            Button("Разрешить") { Task { await store.setTranslate(true) } }
-            Button("Не разрешать", role: .cancel) {}
-        } message: {
-            Text("Для перевода и расшифровки текст сообщений клиентов и звук голосовых передаются сторонним ИИ-сервисам: Google (Gemini), DeepL, Groq, Cerebras, Mistral, OpenRouter, Anthropic. Выключить можно здесь же.")
-        }
         .confirmationDialog("Выйти из кабинета на этом телефоне?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Выйти", role: .destructive) { Task { await store.logout() } }
             Button("Отмена", role: .cancel) {}
@@ -303,7 +279,7 @@ struct FoldersView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Папки").font(Typo.display(30)).tracking(-0.9).foregroundStyle(Pal.fg).padding(.horizontal, 4).padding(.top, 14)
-                    Text(owner ? "Папка — этап сделки, у клиента она одна. Нажми на название, чтобы переименовать, на кружок — сменить цвет, стрелки — порядок." : "Папки настраивает владелец кабинета.")
+                    Text(owner ? "Папка — этап сделки, у клиента она одна. Нажми на название, чтобы переименовать." : "Папки настраивает владелец кабинета.")
                         .font(Typo.body(15)).foregroundStyle(Pal.fg2).lineSpacing(3).padding(.horizontal, 4).padding(.top, 8)
                     Cap("Мои папки")
                     VStack(spacing: 0) {
@@ -325,11 +301,6 @@ struct FoldersView: View {
                                     }
                                     .foregroundStyle(Pal.fg.opacity(i == 0 ? 0.2 : 0.7))
                                     .disabled(i == 0)
-                                    Button { Task { await store.act(["type": "moveFolder", "id": f.id, "dir": 1]) } } label: {
-                                        Image(systemName: "chevron.down").font(.system(size: 15, weight: .semibold)).frame(width: 30, height: 30)
-                                    }
-                                    .foregroundStyle(Pal.fg.opacity(i == store.folders.count - 1 ? 0.2 : 0.7))
-                                    .disabled(i == store.folders.count - 1)
                                     Button { deleting = f } label: {
                                         Image(systemName: "xmark").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30)
                                     }

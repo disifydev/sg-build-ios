@@ -61,6 +61,7 @@ struct ChatsView: View {
                 .contentTransition(.numericText())
             search
             chips
+            if !store.chatSelecting { collectionChips }
             if store.chatSelecting { selectChips }
             list
         }
@@ -155,6 +156,33 @@ struct ChatsView: View {
         .padding(.top, 12)
     }
 
+    /// Ряд «Все классы · 9 класс · 10 класс · группы…»: фильтр по классам и группам, виден сразу.
+    @ViewBuilder private var collectionChips: some View {
+        if !store.classes.isEmpty || !store.groups.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Image(systemName: "graduationcap.fill").font(.system(size: 13)).foregroundStyle(Pal.fg2)
+                    Chip(text: "Все классы", on: store.collectionFilter == "all", height: 32, fontSize: 13) {
+                        withAnimation(.spring(response: 0.3)) { store.collectionFilter = "all" }
+                    }
+                    ForEach(store.classes, id: \.self) { k in
+                        Chip(text: classTitle(k), on: store.collectionFilter == "class:" + k, height: 32, fontSize: 13) {
+                            withAnimation(.spring(response: 0.3)) { store.collectionFilter = store.collectionFilter == "class:" + k ? "all" : "class:" + k }
+                        }
+                    }
+                    ForEach(store.groups, id: \.self) { g in
+                        Chip(text: g, dot: Pal.lav, on: store.collectionFilter == "group:" + g, height: 32, fontSize: 13) {
+                            withAnimation(.spring(response: 0.3)) { store.collectionFilter = store.collectionFilter == "group:" + g ? "all" : "group:" + g }
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 2)
+            }
+            .padding(.top, 8)
+        }
+    }
+
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -162,9 +190,6 @@ struct ChatsView: View {
                 let unreadAll = all.reduce(0) { $0 + $1.unread }
                 Chip(text: "Все", count: unreadAll > 0 ? "• \(unreadAll)" : "\(all.count)", on: store.chatFolder == "all") {
                     withAnimation(.spring(response: 0.3)) { store.chatFolder = "all" }
-                }
-                if !store.classes.isEmpty || !store.groups.isEmpty {
-                    CollectionMenu()
                 }
                 ForEach(store.folders) { f in
                     let inF = all.filter { store.contact($0.contactId)?.folderId == f.id }
@@ -450,6 +475,12 @@ struct ChatRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(name).font(Typo.body(16, .semibold)).foregroundStyle(Pal.fg).lineLimit(1)
+                        if let k = contact?.classes.first {
+                            Text(k + " кл.").font(Typo.body(11, .semibold)).foregroundStyle(Pal.acc)
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Capsule().fill(Pal.acc.opacity(0.14)))
+                                .fixedSize()
+                        }
                         if let c = contact, store.bookName(c) != nil {
                             Image(systemName: "person.crop.circle.badge.checkmark").font(.system(size: 11)).foregroundStyle(Pal.acc.opacity(0.8))
                         }
@@ -477,7 +508,7 @@ struct ChatRow: View {
                     }
                     HStack(spacing: 6) {
                         FolderTag(folder: store.folder(contact?.folderId))
-                        ForEach(Array((contact?.tags ?? []).prefix(2)), id: \.self) { t in
+                        ForEach(Array(((contact?.plainTags ?? []) + (contact?.groups.map { "группа:" + $0 } ?? [])).prefix(2)), id: \.self) { t in
                             Text(tagTitle(t)).font(Typo.body(11, .medium)).foregroundStyle(Pal.fg.opacity(0.78))
                                 .padding(.horizontal, 8).padding(.vertical, 2)
                                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Pal.fg.opacity(0.08)))

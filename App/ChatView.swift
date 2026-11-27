@@ -96,6 +96,7 @@ struct ChatView: View {
     @State private var sendHoldTask: Task<Void, Never>?
     /// высота панели ввода (с ответом/подсказкой) — нижний отступ ленты, чтобы последнее сообщение не пряталось под ней
     @State private var bottomH: CGFloat = 0
+    @State private var pinAsk: Message?
     @FocusState private var inputFocused: Bool
 
     enum NoteFinish { case send, preview, discard }
@@ -151,6 +152,8 @@ struct ChatView: View {
         .task {
             await store.loadHistory(convId)
             await store.loadScheduled(convId)
+            // иностранный чат: первое использование перевода — спросить согласие на отправку в ИИ-сервисы
+            if let c = contact, foreignLang(c) != nil, store.translateOn, store.aiConsent == nil, !store.fixture { _ = await store.ensureAI(askAgain: false) }
             await store.translateIncoming(convId)
         }
         .sheet(item: $sheet) { s in
@@ -184,6 +187,13 @@ struct ChatView: View {
                         .id(conv.id)
                 }
             }
+        }
+        .confirmationDialog("Закрепить сообщение", isPresented: Binding(get: { pinAsk != nil }, set: { if !$0 { pinAsk = nil } }), titleVisibility: .visible) {
+            if let m = pinAsk {
+                Button("Закрепить у себя") { pinAsk = nil; store.pinMessage(convId, m, true, both: false) }
+                Button("Закрепить у себя и у собеседника") { pinAsk = nil; store.pinMessage(convId, m, true, both: true) }
+            }
+            Button("Отмена", role: .cancel) { pinAsk = nil }
         }
         .fullScreenCover(item: $viewer) { v in
             MediaViewer(items: v.items, start: v.start) { viewer = nil }
@@ -278,7 +288,11 @@ struct ChatView: View {
                                onOpenMedia: { idx in openMedia(msgs, messageId: m.id, index: idx) },
                                onQuoteTap: { id in jump(to: id, proxy: proxy) },
                                onReact: { e in store.react(conv.id, m, e) },
-                               onPin: { store.pinMessage(conv.id, m, !conv.pins.contains(m.id)) })
+                               onPin: {
+                                   if conv.pins.contains(m.id) { store.pinMessage(conv.id, m, false) }
+                                   else if conv.network == "telegram" || conv.network == "whatsapp" { pinAsk = m }
+                                   else { store.pinMessage(conv.id, m, true, both: false) }
+                               })
                             .id(m.id)
                             .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
                     }
@@ -718,13 +732,18 @@ struct ChatView: View {
                 .foregroundStyle(Pal.fg)
                 .focused($inputFocused)
                 .accessibilityIdentifier("composer")
-            if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button { inputFocused = false; sheet = .schedule } label: {
-                    Image(systemName: "clock").font(.system(size: 17)).foregroundStyle(Pal.fg.opacity(0.75)).frame(width: 32, height: 32).contentShape(Rectangle())
+            Button {
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if !(store.scheduled[convId] ?? []).isEmpty { inputFocused = false; sheet = .scheduled }
+                    else { store.show("Напиши сообщение, потом выбери, когда отправить"); inputFocused = true }
+                } else {
+                    inputFocused = false; sheet = .schedule
                 }
-                .accessibilityLabel("Отправить позже")
-                .transition(.scale.combined(with: .opacity))
+            } label: {
+                let has: Bool = !(store.scheduled[convId] ?? []).isEmpty
+                Image(systemName: "clock").font(.system(size: 17)).foregroundStyle(has ? Pal.acc : Pal.fg.opacity(0.75)).frame(width: 32, height: 32).contentShape(Rectangle())
             }
+            .accessibilityLabel("Отправить позже")
             Button { sheet = .templates } label: {
                 Image(systemName: "tag").font(.system(size: 17)).foregroundStyle(Pal.fg.opacity(0.75)).frame(width: 32, height: 32).contentShape(Rectangle())
             }
@@ -1280,6 +1299,15 @@ struct ChatView: View {
         switch args[i + 1] {
         case "chat-reply":
             replyTo = msgs.last { !$0.isOut }
+        case "chat-draft":
+            draft = "Здравствуйте! Подтверждаю занятие на завтра"
+        case "chat-sched":
+            draft = "Напоминаю про занятие завтра в 10:00"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { sheet = .schedule }
+        case "chat-scheduled":
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { sheet = .scheduled }
+        case "chat-pin":
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { pinAsk = msgs.first { $0.isOut && !$0.body.isEmpty } }
         case "chat-tr":
             inputFocused = true
         case "chat-tr-sheet":
