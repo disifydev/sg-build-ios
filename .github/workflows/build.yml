@@ -206,11 +206,15 @@ jobs:
         timeout-minutes: 2
         run: bash tools/shot.sh 38-client-voice -fixture -screen client-materials -bottom -mtab voice
 
+      # промо-кадры App Store не должны мешать загрузке в TestFlight: если зависнут, идём дальше
       - name: Снимки для App Store (6.9 дюйма)
-        timeout-minutes: 8
+        timeout-minutes: 12
+        continue-on-error: true
         run: bash tools/appstore.sh
 
       - name: Снимки App Store в артефакт
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: appstore-screens
