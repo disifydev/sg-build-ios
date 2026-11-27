@@ -15,7 +15,7 @@ xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/Sguar
 mkdir -p raw-appstore
 xcrun simctl launch "$UDID" "$BUNDLE_ID" -fixture -screen splash -theme light >/dev/null 2>&1 || true
 sleep 6
-for pair in messages:messages chat-menu:chatctx profile:profile payments:payments schedule:schedule home:home voice:chatvoice; do
+for pair in messages:chats chat-menu:chat-tg profile:client payments:summary schedule:schedule home:today voice:chat-voice-rec; do
   name=${pair%%:*}; screen=${pair##*:}
   to 20 xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID" -fixture -screen "$screen" -theme light >/dev/null 2>&1 || true
   sleep 5

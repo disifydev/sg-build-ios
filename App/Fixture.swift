@@ -1,248 +1,201 @@
 #if DEBUG
 import Foundation
-import SwiftUI
 
-/// Только для снимков симулятора в CI (`-fixture`): демо-кабинет репетитора из макета, без сети. В сборку для TestFlight не попадает.
-/// Аргументы: `-screen <экран>`, `-theme light|dark`, `-state loading|empty|error|offline`.
+/// Только для снимков симулятора в CI (`-fixture`): выдуманный кабинет без сети. В сборку для TestFlight не попадает.
 enum Fixture {
     @MainActor
     static func apply(_ s: Store) {
-        let args = ProcessInfo.processInfo.arguments
-        func arg(_ k: String) -> String? {
-            guard let i = args.firstIndex(of: k), i + 1 < args.count else { return nil }
-            return args[i + 1]
-        }
-        if let t = arg("-theme"), let m = ThemeMode(rawValue: t) { s.theme = m }
-        if let st = arg("-state"), let d = DemoState(rawValue: st) { s.demo = d }
-
-        let cal = Calendar.current
         let now = Date()
-        let today = cal.startOfDay(for: now)
-        func day(_ off: Int) -> Date { cal.date(byAdding: .day, value: off, to: today) ?? today }
-        func at(_ off: Int, _ hm: String) -> String {
-            let p = hm.split(separator: ":").compactMap { Int($0) }
-            return isoString(cal.date(bySettingHour: p[0], minute: p[1], second: 0, of: day(off)) ?? today)
-        }
-
-        let folders = [
-            Folder(id: "f0", key: "new", name: "Новые", color: "#9CC3D3"),
-            Folder(id: "f1", key: "talking", name: "В диалоге", color: "#B9A9DE"),
-            Folder(id: "f2", key: "thinking", name: "Думает", color: "#E2C06A"),
-            Folder(id: "f3", key: "later", name: "Оплатит позже", color: "#E9A37E"),
-            Folder(id: "f4", key: "paid", name: "Оплатил", color: "#86C7A6"),
+        func ago(_ min: Double) -> String { isoString(now.addingTimeInterval(-min * 60)) }
+        let folders: [Folder] = [
+            Folder(id: "f_new", key: "new", name: "Новые", color: "#A9D8FF"),
+            Folder(id: "f_talking", key: "talking", name: "В диалоге", color: "#DCC6FF"),
+            Folder(id: "f_thinking", key: "thinking", name: "Думает", color: "#FFD59E"),
+            Folder(id: "f_later", key: "later", name: "Оплатит позже", color: "#FFB8B0"),
+            Folder(id: "f_paid", key: "paid", name: "Оплатил", color: "#A8EDCB"),
+            Folder(id: "f_repeat", key: "repeat", name: "Повторный клиент", color: "#9EE6E0"),
+            Folder(id: "f_rejected", key: "rejected", name: "Отказ", color: "#B9B2B5"),
         ]
-
-        struct M { let o: Bool; let t: String; let at: String; var kind: String? = nil; var len: Double = 0; var rx: String? = nil; var name: String? = nil }
-        struct C {
-            let id: String; let n: String; let h: String?; let phone: String?; let net: String; let off: Int; let unread: Int; let folder: Int
-            var pin = false; var mute = false; var arch = false; let klass: String?; let tags: [String]; let msgs: [M]
-        }
-        let chats: [C] = [
-            C(id: "anna", n: "Анна Соколова", h: "@anna.sokolova", phone: nil, net: "telegram", off: 0, unread: 1, folder: 1, pin: true, klass: "11", tags: [], msgs: [
-                M(o: false, t: "Здравствуйте! Увидела у вас в профиле разбор, хочу так же для своего аккаунта", at: "15:52"),
-                M(o: true, t: "Добрый день! Да, конечно. Разбор профиля стоит 5 000 ₽, делаю за два дня", at: "15:58", rx: "❤️"),
-                M(o: false, t: "", at: "16:01", kind: "audio", len: 14),
-                M(o: false, t: "Вот тетрадь с последней темой", at: "16:03", kind: "image", name: "note"),
-                M(o: true, t: "Возьмите её на занятие. Посмотрим, на каком шаге стало непонятно", at: "16:07"),
-                M(o: true, t: "", at: "16:09", kind: "round", len: 11, name: "cam"),
-                M(o: false, t: "Отлично, а когда можно начать?", at: "16:13")]),
-            C(id: "maria", n: "Мария Козлова", h: "@mkozlova", phone: nil, net: "telegram", off: 0, unread: 3, folder: 1, klass: "5", tags: [], msgs: [
-                M(o: true, t: "Мария, добрый день! Курс «Старт» стартует 1 декабря, осталось три места", at: "15:20"),
-                M(o: false, t: "Здравствуйте! Звучит интересно", at: "15:38"), M(o: false, t: "Сколько стоит?", at: "15:40"), M(o: false, t: "А рассрочка есть?", at: "15:41")]),
-            C(id: "maxim", n: "Максим Орлов", h: "max.orlov", phone: nil, net: "instagram", off: 0, unread: 2, folder: 0, klass: "9", tags: [], msgs: [
-                M(o: false, t: "Добрый день, подскажите, у вас есть групповые занятия?", at: "13:50"), M(o: false, t: "Для 9 класса", at: "13:51")]),
-            C(id: "ivan", n: "Иван Громов", h: "@grom", phone: nil, net: "telegram", off: 0, unread: 0, folder: 1, klass: "7", tags: [], msgs: [
-                M(o: false, t: "", at: "12:09", kind: "file", name: "Домашка_геометрия.pdf"), M(o: false, t: "Скинул домашку, посмотрите?", at: "12:10"),
-                M(o: true, t: "Получила, посмотрю сегодня вечером", at: "12:27")]),
-            C(id: "irina", n: "+7 916 204-18-33", h: nil, phone: "+7 916 204-18-33", net: "whatsapp", off: 0, unread: 3, folder: 0, klass: "9", tags: [], msgs: [
-                M(o: false, t: "Привет!", at: "12:19"), M(o: false, t: "", at: "12:20", kind: "audio", len: 9), M(o: false, t: "Хочу заказать разбор профиля", at: "12:21")]),
-            C(id: "dmitry", n: "Дмитрий Кузнецов", h: "dkuz", phone: nil, net: "tiktok", off: 0, unread: 1, folder: 0, klass: "11", tags: [], msgs: [
-                M(o: false, t: "Здравствуйте, это актуально? Хотел бы попробовать", at: "10:51")]),
-            C(id: "artem", n: "Артём Волков", h: "artem.v", phone: nil, net: "threads", off: 0, unread: 3, folder: 0, klass: "5", tags: [], msgs: [
-                M(o: false, t: "Классный пост!", at: "07:50"), M(o: false, t: "А можно записаться на пробное?", at: "07:51")]),
-            C(id: "natalia", n: "Наталья Фёдорова", h: "id48211", phone: nil, net: "vk", off: -1, unread: 2, folder: 1, klass: "9", tags: [], msgs: [
-                M(o: true, t: "Когда вам удобно на следующей неделе?", at: "18:02"), M(o: false, t: "Лучше в четверг вечером", at: "19:40")]),
-            C(id: "olga", n: "+7 903 771-52-09", h: nil, phone: "+7 903 771-52-09", net: "max", off: -1, unread: 0, folder: 2, klass: "7", tags: [], msgs: [
-                M(o: false, t: "Тетрадь ещё продаётся?", at: "14:12"), M(o: true, t: "Да, ещё продаётся", at: "14:30")]),
-            C(id: "egor", n: "Егор Жуков", h: "Егор", phone: nil, net: "avito", off: -4, unread: 0, folder: 4, mute: true, klass: nil, tags: [], msgs: [
-                M(o: true, t: "Ссылка на оплату: разбор профиля, 5 000 ₽", at: "11:02"), M(o: false, t: "Спасибо, оплатил", at: "11:40")]),
-            C(id: "nikolay", n: "Николай Попов", h: "@npopov", phone: nil, net: "telegram", off: -5, unread: 0, folder: 3, klass: nil, tags: [], msgs: [
-                M(o: true, t: "Николай, напоминаю про оплату консультации", at: "10:00"), M(o: false, t: "Да, помню, на неделе переведу", at: "10:41")]),
-            C(id: "ksenia", n: "Ксения Лаврова", h: "@ksu_l", phone: nil, net: "telegram", off: -15, unread: 0, folder: 4, arch: true, klass: "11", tags: [], msgs: [
-                M(o: false, t: "Спасибо за занятия, курс закончила!", at: "18:20"), M(o: true, t: "Рада была помочь, приходите ещё", at: "18:31")]),
-            C(id: "shop", n: "Типография «Лист»", h: "avito", phone: nil, net: "avito", off: -24, unread: 0, folder: 0, mute: true, arch: true, klass: nil, tags: [], msgs: [
-                M(o: false, t: "Тетради готовы, можно забирать", at: "11:00")]),
+        struct P { let name: String; let handle: String; let net: String; let folder: String; let tags: [String]; let phone: String?; let msgs: [(String, String, Double)]; let unread: Int }
+        let people: [P] = [
+            P(name: "Анна Белова", handle: "annabel", net: "telegram", folder: "f_new", tags: ["VIP"], phone: nil,
+              msgs: [("in", "Здравствуйте! Сколько стоит курс?", 50)], unread: 1),
+            P(name: "+7 988 473-73-30", handle: "+79884737330", net: "whatsapp", folder: "f_talking", tags: [], phone: "+79884737330",
+              msgs: [("in", "Добрый день, можно записаться на четверг?", 300), ("out", "Здравствуйте! Да, в 15:00 свободно", 290), ("in", "Отлично, оплачу завтра", 280)], unread: 0),
+            P(name: "On Gayrimenkul", handle: "+905301112233", net: "whatsapp", folder: "f_talking", tags: ["Турция"], phone: "+905301112233",
+              msgs: [("out", "Merhaba, On Gayrimenkul! 👋 Google'da firmanızı gördük", 1500)], unread: 0),
+            P(name: "Мария Орлова", handle: "m_orlova", net: "telegram", folder: "f_thinking", tags: ["Сайт"], phone: nil,
+              msgs: [("out", "Отправила программу и цены", 3000), ("in", "Спасибо, я подумаю до пятницы", 2900)], unread: 0),
+            P(name: "Lena Ekicioğlu", handle: "+905551234567", net: "whatsapp", folder: "f_talking", tags: ["Турция"], phone: "+905551234567",
+              msgs: [("out", "Merhaba! Sitenizi inceledik", 4000), ("in", "Lena İnşaat ile iletişime geçtiğiniz için teşekkür ederiz", 3990)], unread: 1),
+            P(name: "Павел Смирнов", handle: "psmirnov", net: "telegram", folder: "f_paid", tags: ["VIP"], phone: "+79161234567",
+              msgs: [("in", "Оплатил, проверьте", 6000), ("out", "Спасибо за оплату! Всё получили.", 5990)], unread: 0),
+            P(name: "Emir Yapı", handle: "+905339998877", net: "whatsapp", folder: "f_talking", tags: [], phone: "+905339998877",
+              msgs: [("out", "Merhaba, Emir Yapı! 👋", 9000)], unread: 0),
+            P(name: "Ольга Тихонова", handle: "olgat", net: "telegram", folder: "f_later", tags: [], phone: nil,
+              msgs: [("in", "Скиньте реквизиты, переведу в понедельник", 12000), ("out", "Отправляю реквизиты для оплаты", 11990)], unread: 0),
         ]
-
-        var contacts: [Contact] = []
-        var convs: [Conversation] = []
-        var events: [AppEvent] = []
-        var mid = 0
-        for (ci, c) in chats.enumerated() {
-            var msgs: [Message] = []
-            for m in c.msgs {
-                mid += 1
-                var att: Attachment? = nil
-                switch m.kind {
-                case "audio": att = Attachment(kind: "audio", name: "voice.ogg", url: "fixture:voice", mediaId: "m\(mid)", mime: "audio/ogg", duration: m.len)
-                case "image": att = Attachment(kind: "image", name: "photo.jpg", url: "fixture:" + (m.name ?? "note"), mediaId: "m\(mid)", mime: "image/jpeg")
-                case "round": att = Attachment(kind: "video", name: "circle.mp4", url: "fixture:" + (m.name ?? "cam"), mediaId: "m\(mid)", mime: "video/mp4", round: true, duration: m.len)
-                case "file": att = Attachment(kind: "file", name: m.name, url: "fixture:file", mediaId: "m\(mid)", mime: "application/pdf")
-                default: break
-                }
-                msgs.append(Message(id: "msg\(mid)", dir: m.o ? "out" : "in", text: m.t, at: at(c.off, m.at), attachments: att.map { [$0] },
-                                    reactions: m.rx.map { [Reaction(emoji: $0, mine: false)] }))
+        var contacts: [Contact] = [], convs: [Conversation] = [], events: [AppEvent] = []
+        for (i, p) in people.enumerated() {
+            let cid = "c\(i)", vid = "v\(i)"
+            let firstMin = (p.msgs.first?.2 ?? 100) + 60 * 24 * Double(i)
+            contacts.append(Contact(id: cid, name: p.name, handle: p.handle, hue: Double((i * 47) % 360), source: p.net, networks: [p.net],
+                                    folderId: p.folder, assignee: "", note: i == 3 ? "Хочет групповые занятия" : "", phone: p.phone, email: i == 5 ? "pavel@example.com" : nil,
+                                    tags: p.tags, lang: (i == 0 || i == 4) ? "tr" : "ru", avatar: nil, firstContactAt: ago(firstMin)))
+            var msgs: [Message] = p.msgs.enumerated().map { j, m in
+                Message(id: "m\(i)_\(j)", dir: m.0, text: m.1, at: ago(m.2), author: nil, attachments: nil, translation: nil)
             }
-            var meta: [String: String] = [:]
-            if c.pin { meta["pinned"] = isoString(now) }
-            if c.mute { meta["muted"] = "1" }
-            if c.arch { meta["archived"] = "1" }
-            if c.id == "anna" { meta["pins"] = msgs[4].id }
-            var tags = c.tags
-            if let k = c.klass { tags.append("класс:" + k) }
-            contacts.append(Contact(id: c.id, name: c.n, handle: c.h, source: c.net, networks: [c.net], folderId: folders[c.folder].id,
-                                    assignee: "Виктория", note: c.id == "maria" ? "Хочет рассрочку на курс «Старт»" : "", phone: c.phone, tags: tags,
-                                    firstContactAt: at(c.off - (ci % 3), "09:00")))
-            convs.append(Conversation(id: c.id, contactId: c.id, network: c.net, messages: msgs, older: 0, unread: c.unread, channelId: "ch_" + c.net, meta: meta))
-            events.append(AppEvent(id: "lead_" + c.id, type: "lead_created", contactId: c.id, at: at(c.off - (ci % 3), "09:00"), meta: nil))
+            if i == 0 { msgs = mediaChat(ago) }
+            convs.append(Conversation(id: vid, contactId: cid, network: p.net, messages: msgs, older: 0, unread: p.unread, channelId: "ch_\(p.net)"))
+            events.append(AppEvent(id: "e\(i)", type: "lead_created", contactId: cid, at: ago(firstMin), meta: nil))
+            for (j, m) in p.msgs.enumerated() {
+                events.append(AppEvent(id: "e\(i)_\(j)", type: m.0 == "in" ? "message_in" : "message_out", contactId: cid, at: ago(m.2), meta: nil))
+            }
         }
-
-        // клиенты без переписки в демо (папки и классы, как в макете)
-        let extra: [(String, String, Int, Int, String?, [String])] = [
-            ("Елена Морозова", "instagram", 0, -1, "7", []), ("Софья Кузнецова", "telegram", 0, -9, "5", ["Математика"]), ("Никита Попов", "whatsapp", 0, -9, "9", ["Физика"]),
-            ("Сергей Лебедев", "instagram", 1, -3, "11", []), ("Павел Новиков", "tiktok", 1, -4, "7", []),
-            ("Алина Захарова", "instagram", 2, -4, "9", []), ("Юлия Мельникова", "threads", 2, -4, "5", []), ("Кирилл Тихонов", "telegram", 2, -5, "11", []),
-            ("Дарья Крылова", "telegram", 2, -6, "7", []), ("Андрей Семёнов", "telegram", 3, -7, "9", []), ("Полина Ковалёва", "tiktok", 3, -8, "5", []),
-            ("Мария Павлова", "telegram", 3, -9, "11", ["Математика"]), ("Иван Иванов", "telegram", 4, -8, "9", ["Математика"]),
-            ("Полина Фёдорова", "telegram", 4, -9, "7", ["Математика"]), ("Степан Петров", "whatsapp", 4, -9, "11", ["Физика"]),
-            ("Екатерина Руденко", "instagram", 4, -1, nil, []), ("Светлана Дроздова", "telegram", 4, -2, nil, []), ("Виктория Ершова", "vk", 3, -3, nil, []),
-            ("Анна С.", "whatsapp", 0, -2, nil, []),
-        ]
-        for (i, e) in extra.enumerated() {
-            let id = "x\(i)"
-            var tags = e.5
-            if let k = e.4 { tags.append("класс:" + k) }
-            contacts.append(Contact(id: id, name: e.0, handle: nil, source: e.1, networks: [e.1], folderId: folders[e.2].id, assignee: "Виктория",
-                                    tags: tags, firstContactAt: at(e.3, "11:00")))
-            if i < 8 { events.append(AppEvent(id: "lead_" + id, type: "lead_created", contactId: id, at: at(e.3, "11:00"), meta: nil)) }
+        let tomorrow10 = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: now.addingTimeInterval(86400)) ?? now
+        s.state = AppState(
+            workspace: WorkspaceInfo(currency: "RUB", translate: true),
+            channels: [
+                Channel(id: "ch_whatsapp", type: "whatsapp", mode: "qr", name: "WhatsApp +905077748057", status: "connected", error: nil),
+                Channel(id: "ch_threads", type: "threads", mode: nil, name: "@disifydev", status: "connected", error: nil),
+                Channel(id: "ch_telegram", type: "telegram", mode: "mtproto", name: "@disifydev", status: "connected", error: nil),
+            ],
+            folders: folders, contacts: contacts, conversations: convs,
+            deals: [Deal(id: "d1", contactId: "c5", productId: nil, amount: 5000, status: "paid", date: ago(5990), dueAt: nil)],
+            reminders: [
+                Reminder(id: "r1", contactId: "c1", at: isoString(tomorrow10), text: "Проверить оплату", done: false),
+                Reminder(id: "r2", contactId: "c7", at: ago(120), text: "Напомнить про реквизиты", done: false),
+            ],
+            events: events,
+            templates: [
+                Template(id: "t1", title: "Привет", text: "Здравствуйте! Спасибо, что написали. Подскажите, что вас интересует?"),
+                Template(id: "t2", title: "Реквизиты", text: "Отправляю реквизиты для оплаты. После оплаты пришлите, пожалуйста, скрин."),
+            ])
+        s.user = User(id: "u1", workspaceId: "ws1", email: "demo@sguardo.ru", name: "Владелец", role: "owner", locale: "ru", tz: "Europe/Moscow", features: Features(outreach: false, partners: true))
+        s.account = AccountInfo(name: "Владелец", email: "demo@sguardo.ru", role: "owner", plan: "business", status: "active", workspaceName: "Мой кабинет", paidUntil: nil, trialEndsAt: nil)
+        // новые функции: закрепы, архив, классы, реакции, расписание, сотрудники, найденные оплаты
+        for i in s.state.conversations.indices {
+            let id = s.state.conversations[i].id
+            if id == "v0" { s.state.conversations[i].meta = ["pinned": ago(1), "pins": "m0_4"] }
+            if id == "v3" { s.state.conversations[i].meta = ["pinned": ago(2)] }
+            if id == "v2" || id == "v6" { s.state.conversations[i].meta = ["archived": "1"] }
+            if id == "v4" { s.state.conversations[i].meta = ["muted": "1"] }
         }
-        func cid(_ name: String) -> String { contacts.first { $0.name == name }?.id ?? "anna" }
-
-        // входящие по дням (последние 14 дней)
-        let bars = [0, 2, 2, 2, 2, 2, 2, 4, 2, 6, 2, 5, 9, 4]
-        for (i, n) in bars.enumerated() where n > 0 {
-            for k in 0..<n { events.append(AppEvent(id: "in\(i)_\(k)", type: "message_in", contactId: "anna", at: at(i - 13, String(format: "%02d:%02d", 9 + k, 10)), meta: nil)) }
+        for i in s.state.contacts.indices {
+            let c = s.state.contacts[i]
+            let extra: [String] = ["c0": ["класс:9", "группа:Мини-группа ЕГЭ"], "c1": ["класс:7"], "c3": ["класс:9"], "c5": ["класс:11", "группа:Мини-группа ЕГЭ"], "c7": ["класс:5"]][c.id] ?? []
+            s.state.contacts[i] = Contact(id: c.id, name: c.name, handle: c.handle, hue: c.hue, source: c.source, networks: c.networks, folderId: c.folderId,
+                                          assignee: c.assignee, note: c.note, phone: c.phone, email: c.email, tags: (c.tags ?? []) + extra, lang: c.lang,
+                                          avatar: c.avatar, firstContactAt: c.firstContactAt)
         }
-
-        let products = [
-            Product(id: "p0", name: "Консультация 60 мин", price: 3500), Product(id: "p1", name: "Разбор профиля", price: 5000),
-            Product(id: "p2", name: "Курс «Старт»", price: 12900), Product(id: "p3", name: "Менторство 30 дней", price: 24000),
-            Product(id: "p4", name: "Математика · 60 мин", price: 1800), Product(id: "p5", name: "Физика · 60 мин", price: 2000),
-        ]
-        let pays: [(String, String, Int, Double, String, Int?)] = [
-            ("Егор Жуков", "p1", -1, 5000, "paid", nil), ("Екатерина Руденко", "p0", -1, 1500, "paid", nil), ("Светлана Дроздова", "p0", -2, 3500, "paid", nil),
-            ("Андрей Семёнов", "p0", -3, 3500, "promised", -1), ("Виктория Ершова", "p2", -3, 12900, "promised", 1), ("Николай Попов", "p0", -3, 3500, "promised", -2),
-            ("Полина Ковалёва", "p1", -3, 5000, "promised", -1), ("Алина Захарова", "p3", -4, 24000, "promised", 4), ("Мария Павлова", "p3", -6, 24000, "paid", nil),
-            ("Анна Соколова", "p2", -7, 12900, "paid", nil), ("Иван Иванов", "p4", -8, 1800, "paid", nil), ("Степан Петров", "p5", -9, 2000, "promised", -4),
-        ]
-        let deals = pays.enumerated().map { i, p in
-            Deal(id: "d\(i)", contactId: cid(p.0), productId: p.1, amount: p.3, status: p.4, date: at(p.2, "12:00"), dueAt: p.5.map { at($0, "12:00") })
+        if let i = s.state.conversations.firstIndex(where: { $0.id == "v0" }) {
+            for j in s.state.conversations[i].messages.indices {
+                let mid = s.state.conversations[i].messages[j].id
+                if mid == "m0_1" { s.state.conversations[i].messages[j].reactions = [Reaction(emoji: "❤️", mine: false)] }
+                if mid == "m0_3" { s.state.conversations[i].messages[j].reactions = [Reaction(emoji: "👍", mine: true)] }
+            }
         }
-        let reminders = [
-            Reminder(id: "r0", contactId: "anna", at: at(-7, "10:00"), text: "Уточнить оплату до занятия", done: false),
-            Reminder(id: "r1", contactId: "maria", at: at(-2, "10:00"), text: "Прислать рассрочку", done: false),
-            Reminder(id: "r2", contactId: "nikolay", at: at(-2, "12:00"), text: "Напомнить об оплате", done: false),
-            Reminder(id: "r3", contactId: "artem", at: at(0, "16:00"), text: "Записать на пробное", done: false),
-            Reminder(id: "r4", contactId: "natalia", at: at(0, "17:21"), text: "Предложить четверг 18:30", done: false),
+        s.state.team = [
+            TeamMember(id: "u1", name: "Владелец", role: "owner", email: "demo@sguardo.ru", permissions: nil),
+            TeamMember(id: "u2", name: "Анна Морозова", role: "agent", email: "anna@example.com", permissions: Permissions(onlyAssigned: false, canPay: true, canExport: false, seeMoney: true)),
         ]
-        let templates = ["Пришлю ссылку на оплату", "Свободные окна: чт 18:30, сб 12:00", "Спасибо, записала вас", "Рассрочка есть: три платежа без переплаты"]
-            .enumerated().map { Template(id: "t\($0.offset)", title: $0.element, text: $0.element) }
-        let team = [
-            TeamMember(id: "u1", name: "Виктория", role: "owner", email: "demo@sguardo.ru", permissions: nil),
-            TeamMember(id: "u2", name: "Анна Морозова", role: "agent", email: "anna@sguardo.ru",
-                       permissions: Permissions(channels: .all, onlyAssigned: false, canPay: true, canExport: false, seeMoney: true)),
-        ]
-
-        s.state = AppState(workspace: WorkspaceInfo(currency: "RUB", translate: false), channels: [], folders: folders, contacts: contacts,
-                           conversations: convs, products: products, deals: deals, reminders: reminders, events: events, templates: templates, team: team)
-        s.user = User(id: "u1", workspaceId: "ws1", email: "demo@sguardo.ru", name: "Виктория", role: "owner", locale: "ru", tz: "Europe/Moscow")
-        s.account = AccountInfo(name: "Виктория", email: "demo@sguardo.ru", role: "owner", workspaceName: "Демо-кабинет")
-        s.loaded = true
+        s.presence = ["v0": Presence(online: true, lastSeen: nil)]
+        s.scheduled = ["v0": [ScheduledMessage(id: "sch1", conversationId: "v0", text: "Напоминаю про занятие завтра в 10:00", sendAt: isoString(tomorrow10.addingTimeInterval(-3600)), status: "pending", error: nil)]]
+        s.findings = [PaymentFinding(messageId: "pf1", conversationId: "v1", contactId: "c1", amount: 3500, currency: "RUB", payer: "Мария К.", purpose: "консультация", source: "receipt", duplicateOf: nil)]
+        s.suggestions = [LinkSuggestion(aId: "c5", bId: "c7", aName: "Павел Смирнов", bName: "Ольга Тихонова", reason: "Совпадает номер телефона")]
+        s.aiProfiles = ["c5": AIProfile(role: AIField(value: "parent", confidence: 0.9, manual: nil), grade: AIField(value: "11", confidence: 0.5, manual: nil),
+                                        lessonType: AIField(value: "group", confidence: 0.8, manual: nil), groupName: nil,
+                                        summary: "Мама ученика 11 класса, готовятся к ЕГЭ по математике, удобно по вечерам.")]
         s.bookAccess = true
-        s.contactsOn = true
-        s.bookNames = [PhoneBook.key("+7 916 204-18-33"): "Ирина Белова", PhoneBook.key("+7 903 771-52-09"): "Ольга Никитина"]
-        s.presence = ["maria": Presence(online: true, lastSeen: nil), "anna": Presence(online: false, lastSeen: at(0, "16:14"))]
-        s.scheduled = ["anna": [ScheduledMessage(id: "s1", conversationId: "anna", text: "Напоминаю про занятие завтра в 10:00", sendAt: at(1, "09:00"), status: "pending", error: nil)]]
-        s.findings = [PaymentFinding(messageId: "f1", conversationId: "maria", contactId: "maria", amount: 3500, currency: "RUB", payer: "Мария К.",
-                                     purpose: "консультация", source: "receipt", duplicateOf: nil)]
-        s.suggestions = [LinkSuggestion(aId: "anna", bId: cid("Анна С."), aName: "Анна Соколова", bName: "Анна С.", reason: "Совпадают имя и фамилия")]
-        s.notifSeen = cal.date(bySettingHour: 15, minute: 0, second: 0, of: today) ?? today
-        s.pushOn = true
-
-        // занятия этой недели: «сегодня» как пятница макета
-        let L: [(Int, String, Int, String, String)] = [
-            (0, "10:00", 60, "Математика", "Анна Соколова"), (0, "12:30", 90, "Физика", "Иван Громов"), (0, "16:00", 30, "Пробное занятие", "Артём Волков"),
-            (0, "18:30", 60, "Математика", "Наталья Фёдорова"), (-4, "11:00", 60, "Физика", "Мария Козлова"), (-3, "17:00", 60, "Математика", "Иван Громов"),
-            (-3, "19:00", 60, "Консультация", "Николай Попов"), (-2, "15:00", 60, "Консультация", "Максим Орлов"), (-1, "10:00", 60, "Математика", "Мария Козлова"),
-            (-1, "18:00", 60, "Физика", "Дмитрий Кузнецов"), (1, "12:00", 90, "Математика", "Ольга Никитина"),
-        ]
-        var lessons: [Lesson] = []
-        for (i, l) in L.enumerated() {
-            let c = cid(l.4)
-            let start = parseISO(at(l.0, l.1)) ?? now
-            lessons.append(Lesson(id: "l\(i)", conversationId: c, contactId: c, startsAt: isoString(start), endsAt: isoString(start.addingTimeInterval(Double(l.2) * 60)),
-                                  status: "planned", seriesId: i == 0 ? "ser1" : nil))
-            s.lessonSubject["l\(i)"] = l.3
+        s.bookNames = [PhoneBook.key("+79884737330"): "Ирина Белова"]
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        func lessonAt(_ day: Int, _ h: Int, _ m: Int, _ mins: Int, _ cid: String, _ conv: String, _ subj: String, _ id: String, series: String? = nil) -> Lesson {
+            let st = cal.date(bySettingHour: h, minute: m, second: 0, of: cal.date(byAdding: .day, value: day, to: today) ?? today) ?? now
+            s.lessonSubject[id] = subj
+            return Lesson(id: id, conversationId: conv, contactId: cid, startsAt: isoString(st), endsAt: isoString(st.addingTimeInterval(Double(mins) * 60)), status: "planned", seriesId: series)
         }
-        s.lessons = lessons
+        s.lessons = [
+            lessonAt(0, 10, 0, 60, "c0", "v0", "Математика", "l1", series: "s1"),
+            lessonAt(0, 12, 30, 90, "c3", "v3", "Физика", "l2"),
+            lessonAt(0, 16, 0, 30, "c7", "v7", "Пробное занятие", "l3"),
+            lessonAt(0, 18, 30, 60, "c5", "v5", "Математика", "l4", series: "s2"),
+            lessonAt(1, 11, 0, 60, "c1", "v1", "Консультация", "l5"),
+            lessonAt(-1, 17, 0, 60, "c0", "v0", "Математика", "l6", series: "s1"),
+        ]
         s.lessonsWeek = Store.monday(of: now)
-
-        s.phase = .ready
-        s.tab = .home
-        let screen = arg("-screen") ?? "home"
-        switch screen {
-        case "splash": s.phase = .launching
-        case "onboard", "onboard-contacts": s.phase = .onboarding
-        case "login", "code": s.phase = .login
-        case "home": s.tab = .home
-        case "messages": s.tab = .messages
-        case "archive": s.tab = .messages; s.showArchiveRow = true; s.messagesPath = [.archive]
-        case "messages-archive": s.tab = .messages; s.showArchiveRow = true
-        case "clients": s.tab = .clients
-        case "payments": s.tab = .payments
-        case "more": s.tab = .more
-        case "chat", "chatctx", "chatreply", "chattpl", "chatvoice", "chatcircle", "chatselect":
-            s.tab = .messages
-            s.messagesPath = [.chat(screen == "chatreply" || screen == "chattpl" ? "maria" : "anna")]
-            s.demoChatOverlay = ["chatctx": "context", "chatreply": "reply", "chattpl": "templates", "chatvoice": "voice", "chatcircle": "circle", "chatselect": "select"][screen]
-        case "profile": s.tab = .messages; s.messagesPath = [.chat("anna"), .profile("anna")]
-        case "profile-files": s.tab = .messages; s.messagesPath = [.profile("ivan")]
-        case "edit": s.tab = .messages; s.messagesPath = [.profile("irina"), .editContact("irina")]
-        case "notifications": s.tab = .home; s.homePath = [.notifications]
-        case "schedule": s.tab = .more; s.morePath = [.schedule]
-        case "folders": s.tab = .more; s.morePath = [.folders]
-        case "lists": s.tab = .more; s.morePath = [.lists]
-        case "staff": s.tab = .more; s.morePath = [.account, .staff]
-        case "account": s.tab = .more; s.morePath = [.account]
-        case "security": s.tab = .more; s.morePath = [.security]
-        default: break
+        s.phase = ProcessInfo.processInfo.arguments.contains("-login") ? .login : .ready
+        if ProcessInfo.processInfo.arguments.contains("-toast") {
+            s.toast = Toast(text: "Метка «VIP» снята", ok: true, undo: {})
         }
-        let sheets: [String: SheetKind] = [
-            "newpay": .newPay(contactId: nil), "newclient": .newClient, "addlesson": .addLesson(editId: nil), "lesson": .lesson("l0"),
-            "invite": .invite, "folder": .folder("f1"), "sched": .schedSend(conv: "anna", text: "Напоминаю про занятие завтра"),
-            "attach": .attach(conv: "anna"), "fwd": .forward(conv: "anna", mids: ["msg5"]), "staffrole": .staff("u2"),
-        ]
-        if let k = sheets[screen] {
-            switch screen {
-            case "addlesson", "lesson": s.tab = .more; s.morePath = [.schedule]
-            case "sched", "attach", "fwd": s.tab = .messages; s.messagesPath = [.chat("anna")]
-            case "invite", "staffrole": s.tab = .more; s.morePath = [.account, .staff]
-            case "folder": s.tab = .more; s.morePath = [.folders]
-            case "newclient": s.tab = .clients
-            default: s.tab = .payments
+        if let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-wall"), i + 1 < ProcessInfo.processInfo.arguments.count,
+           let w = Wall(rawValue: ProcessInfo.processInfo.arguments[i + 1]) { s.wall = w }
+        if let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-theme"), i + 1 < ProcessInfo.processInfo.arguments.count,
+           let t = ThemeMode(rawValue: ProcessInfo.processInfo.arguments[i + 1]) { s.theme = t }
+        if let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-screen"), i + 1 < ProcessInfo.processInfo.arguments.count {
+            switch ProcessInfo.processInfo.arguments[i + 1] {
+            case "today": s.tab = .today
+            case "summary": s.tab = .summary
+            case "profile": s.tab = .profile
+            case "chat": s.chatsPath = [.chat("v1")]
+            case "chat-tr", "chat-tr-sheet": s.chatsPath = [.chat("v4")]
+            case "chats-folder": s.chatFolder = "f_talking"
+            case "chats-select":
+                s.chatSelecting = true
+                s.chatSelected = ["v1", "v4", "v6"]
+            case "chats-folder-sheet":
+                s.chatSelecting = true
+                s.chatSelected = ["v1", "v4"]
+                s.chatBatchFolderSheet = true
+            case "chat-tg", "chat-reply", "chat-voice", "chat-preview", "viewer", "note", "note-rec", "note-lock", "chat-voice-rec": s.chatsPath = [.chat("v0")]
+            case "client": s.chatsPath = [.client("c5")]
+            case "folders": s.tab = .profile; s.profilePath = [.folders]
+            case "partners": s.tab = .profile; s.profilePath = [.partners]
+            case "archive": s.chatsPath = [.archive]
+            case "schedule": s.tab = .profile; s.profilePath = [.schedule]
+            case "lists": s.tab = .profile; s.profilePath = [.lists]
+            case "staff": s.tab = .profile; s.profilePath = [.staff]
+            case "light": s.theme = .light
+            case "chats-light": s.theme = .light
+            case "chat-light": s.theme = .light; s.chatsPath = [.chat("v0")]
+            case "code": s.phase = .login
+            default: break
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { s.sheet = k }
         }
+    }
+
+    /// Переписка с фото, голосовым, ответом и кружком — для снимков чата и просмотрщика.
+    static func mediaChat(_ ago: (Double) -> String) -> [Message] {
+        let photo = Attachment(kind: "image", name: "Фото", url: "fixture:photo-1", mediaId: nil, mime: "image/jpeg", round: nil)
+        let photo2 = Attachment(kind: "image", name: "Фото", url: "fixture:photo-2", mediaId: nil, mime: "image/jpeg", round: nil)
+        let voice = Attachment(kind: "audio", name: "Голосовое", url: "fixture:voice", mediaId: nil, mime: "audio/ogg", round: nil)
+        let note = Attachment(kind: "video", name: "Кружок", url: "fixture:note", mediaId: nil, mime: "video/mp4", round: true)
+        var out: [Message] = []
+        out.append(Message(id: "m0_0", dir: "in", text: "Здравствуйте! Сколько стоит курс?", at: ago(95), author: nil, attachments: nil, translation: nil))
+        var a = Message(id: "m0_1", dir: "out", text: "Вот программа и расписание", at: ago(90), author: "Вы", attachments: [photo], translation: nil)
+        a.externalId = "100:11"
+        out.append(a)
+        out.append(Message(id: "m0_2", dir: "in", text: "", at: ago(70), author: nil, attachments: [voice], translation: nil))
+        out.append(Message(id: "m0_3", dir: "in", text: "А вот так у меня сейчас", at: ago(60), author: nil, attachments: [photo2], translation: nil))
+        var r = Message(id: "m0_4", dir: "out", text: "Отлично, с таким уровнем подойдёт продвинутая группа", at: ago(55), author: "Вы", attachments: nil, translation: nil)
+        r.replyTo = ReplyRef(id: "m0_3", text: "А вот так у меня сейчас", dir: "in")
+        r.externalId = "100:14"
+        out.append(r)
+        var n = Message(id: "m0_5", dir: "out", text: "", at: ago(52), author: "Вы", attachments: [note], translation: nil)
+        n.externalId = "100:15"
+        out.append(n)
+        // кружок клиента (слева), расшифровка уже пришла с сервера
+        let note2 = Attachment(kind: "video", name: "Кружок", url: "fixture:note2", mediaId: nil, mime: "video/mp4", round: true)
+        var n2 = Message(id: "m0_5b", dir: "in", text: "", at: ago(51), author: nil, attachments: [note2], translation: nil)
+        n2.transcript = Transcript(text: "Вот так я сейчас играю — посмотрите, пожалуйста, руку.", lang: "ru")
+        out.append(n2)
+        out.append(Message(id: "m0_6", dir: "in", text: "Сколько стоит курс целиком?", at: ago(50), author: nil, attachments: nil, translation: nil))
+        // голосовое, расшифровка которого уже пришла с сервера: по «→A» показывается без запроса
+        let voice2 = Attachment(kind: "audio", name: "Голосовое", url: "fixture:voice2", mediaId: nil, mime: "audio/ogg", round: nil)
+        var v2 = Message(id: "m0_7", dir: "in", text: "", at: ago(48), author: nil, attachments: [voice2], translation: nil)
+        v2.transcript = Transcript(text: "И ещё вопрос: в группе сколько человек? Хочу, чтобы было не больше восьми.", lang: "ru")
+        out.append(v2)
+        return out
     }
 }
 #endif

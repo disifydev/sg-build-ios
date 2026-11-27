@@ -1,257 +1,173 @@
 import SwiftUI
 
-/// Сводка: лиды, оплаты, ждут ответа (только «Сегодня»), напомнить, входящие по дням, «Написать сегодня».
 struct SummaryView: View {
     @Environment(Store.self) private var store
-    @State private var period = "week"
+    @State private var period = "month"
+
+    private struct NetRow: Identifiable { let net: String; let n: Int; var id: String { net } }
+    private struct FolderRow: Identifiable { let folder: Folder; let n: Int; var id: String { folder.id } }
+
+    private struct Stats {
+        var revenue: Double = 0
+        var promised = 0
+        var newClients = 0
+        var wrote = 0
+        var replied = 0
+        var ins = 0
+        var outs = 0
+        var byNet: [NetRow] = []
+        var byFolder: [FolderRow] = []
+        var total = 0
+    }
+
+    private func revenueNote(_ rev: Double, _ promised: Int) -> String {
+        let base: String = rev > 0 ? "по отмеченным оплатам" : "отметь «Оплатил» в карточке клиента — сумма появится тут"
+        return promised > 0 ? base + " · обещали: \(promised)" : base
+    }
+
+    private func barWidth(_ total: CGFloat, count: Int, n: Int, all: Int) -> CGFloat {
+        let free: CGFloat = total - CGFloat(max(0, count - 1)) * 2
+        let share: CGFloat = CGFloat(n) / CGFloat(max(1, all))
+        return max(2, free * share)
+    }
+
+    private func percent(_ n: Int, _ total: Int) -> String {
+        let p: Double = Double(n) / Double(max(1, total)) * 100
+        return "\(Int(p.rounded()))%"
+    }
+
+    private func compute() -> Stats {
+        let s = store.state
+        let span: TimeInterval = period == "week" ? 7 * 86400 : (period == "month" ? 30 * 86400 : 1e12)
+        let from = Date().addingTimeInterval(-span)
+        var st = Stats()
+        st.revenue = s.deals.filter { $0.status == "paid" && $0.day >= from }.reduce(0) { $0 + $1.amount }
+        st.promised = s.deals.filter { $0.status == "promised" }.count
+        let newContacts = s.contacts.filter { $0.first >= from }
+        st.newClients = newContacts.count
+        let ev = s.events.filter { $0.date >= from }
+        if !s.events.isEmpty {
+            st.ins = ev.filter { $0.type == "message_in" }.count
+            st.outs = ev.filter { $0.type == "message_out" }.count
+            var firstOut: [String: Date] = [:]
+            for e in ev where e.type == "message_out" { firstOut[e.contactId] = min(firstOut[e.contactId] ?? e.date, e.date) }
+            st.wrote = firstOut.count
+            st.replied = Set(ev.filter { e in e.type == "message_in" && (firstOut[e.contactId].map { o in e.date > o } ?? false) }.map(\.contactId)).count
+        } else {
+            let msgs = s.conversations.flatMap { c in c.messages.filter { $0.date >= from }.map { (c.contactId, $0) } }
+            st.ins = msgs.filter { !$0.1.isOut }.count
+            st.outs = msgs.count - st.ins
+            st.wrote = Set(msgs.filter { $0.1.isOut }.map { $0.0 }).count
+            st.replied = s.conversations.filter { c in
+                guard let o = c.messages.firstIndex(where: { $0.isOut && $0.date >= from }) else { return false }
+                return c.messages[o...].contains { !$0.isOut }
+            }.count
+        }
+        var nets: [String: Int] = [:]
+        for c in newContacts { nets[c.source ?? "telegram", default: 0] += 1 }
+        st.byNet = nets.sorted { $0.value > $1.value }.map { NetRow(net: $0.key, n: $0.value) }
+        st.byFolder = s.folders.map { f in FolderRow(folder: f, n: s.contacts.filter { $0.folderId == f.id }.count) }.filter { $0.n > 0 }
+        st.total = s.contacts.count
+        return st
+    }
 
     var body: some View {
-        Screen(bottom: 120) {
-            TabHeader(title: "Сводка", sub: "лиды, оплаты и кому написать сегодня") { BellAndAccount() }
-            Seg(items: [("today", "Сегодня", nil), ("week", "Неделя", nil), ("month", "Месяц", nil)], selection: $period)
-                .padding(.horizontal, 16)
-            content
+        let st = compute()
+        let cur = store.state.workspace?.currency
+        let mx = max(1, st.byNet.map(\.n).max() ?? 1)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Сводка").font(Typo.display(30)).tracking(-0.9).foregroundStyle(Pal.fg).padding(.horizontal, 4)
+                GlassSegment(items: [("week", "Неделя"), ("month", "Месяц"), ("all", "Всё время")], selection: $period)
+                    .padding(.top, 16)
+                if !store.findings.isEmpty {
+                    VStack(spacing: 8) {
+                        ForEach(store.findings.prefix(3)) { f in FindingCard(f: f) }
+                    }
+                    .padding(.top, 14)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.findings.count)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Выручка").font(Typo.body(14)).foregroundStyle(Pal.fg2)
+                    Text(Fmt.money(st.revenue, currency: cur))
+                        .font(Typo.display(38, .bold)).tracking(-1.9).foregroundStyle(Pal.fg)
+                        .contentTransition(.numericText())
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    Text(revenueNote(st.revenue, st.promised))
+                        .font(Typo.body(13)).foregroundStyle(Pal.fg2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .glassRect(24)
+                .padding(.top, 14)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    Tile(label: "Новых клиентов", value: "\(st.newClients)", labelSize: 13)
+                    Tile(label: "Мы написали", value: "\(st.wrote)", labelSize: 13)
+                    Tile(label: "Ответили", value: "\(st.replied)", valueColor: Pal.mint, labelSize: 13)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Сообщений").font(Typo.body(13)).foregroundStyle(Pal.fg2)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(st.ins)").font(Typo.display(24)).foregroundStyle(Pal.fg)
+                            Text("вх · \(st.outs) исх").font(Typo.body(14, .medium)).foregroundStyle(Pal.fg2).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 14)
+                    .glassRect(22)
+                }
+                .padding(.top, 10)
+
+                Cap("Откуда новые клиенты")
+                VStack(spacing: 14) {
+                    if st.byNet.isEmpty {
+                        Text("За этот период новых нет").font(Typo.body(15)).foregroundStyle(Pal.fg2).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ForEach(st.byNet) { row in
+                        VStack(spacing: 6) {
+                            HStack {
+                                Text(NetInfo.of(row.net).name).font(Typo.body(14)).foregroundStyle(Pal.fg)
+                                Spacer()
+                                Text("\(row.n)").font(Typo.body(14, .bold)).foregroundStyle(Pal.fg)
+                            }
+                            Bar(fraction: Double(row.n) / Double(mx), color: row.net == "whatsapp" ? Pal.mint : Pal.sky)
+                        }
+                    }
+                }
+                .padding(16)
+                .glassRect(24)
+
+                Cap("Где сейчас клиенты")
+                VStack(alignment: .leading, spacing: 12) {
+                    GeometryReader { g in
+                        HStack(spacing: 2) {
+                            ForEach(st.byFolder) { row in
+                                Rectangle().fill(Color(css: row.folder.color))
+                                    .frame(width: barWidth(g.size.width, count: st.byFolder.count, n: row.n, all: st.total))
+                            }
+                        }
+                    }
+                    .frame(height: 12)
+                    .clipShape(Capsule())
+                    FlowLayout(spacing: 10) {
+                        ForEach(st.byFolder) { row in
+                            HStack(spacing: 6) {
+                                Circle().fill(Color(css: row.folder.color)).frame(width: 8, height: 8)
+                                Text(row.folder.name).font(Typo.body(13)).foregroundStyle(Pal.fg)
+                                Text("\(row.n)").font(Typo.body(13, .bold)).foregroundStyle(Pal.fg)
+                                Text(percent(row.n, st.total)).font(Typo.body(13)).foregroundStyle(Pal.fg3)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .glassRect(24)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 130)
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: period)
         }
         .refreshable { await store.loadState(force: true) }
-    }
-
-    @ViewBuilder private var content: some View {
-        switch dataState(store) {
-        case .loading:
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(0..<4, id: \.self) { _ in Skel(h: 112, r: 24) }
-            }
-            .padding(.horizontal, 12).padding(.top, 16)
-            Skel(h: 180, r: 26).padding(12)
-        case .error:
-            EmptyBlock(icon: "alert", title: "Не получилось загрузить", text: "Сервер не ответил. Проверьте связь и попробуйте ещё раз", error: true,
-                       button: "Повторить", buttonIcon: "refresh") { Task { await store.loadState(force: true) } }
-        case .empty:
-            EmptyBlock(icon: "trend", title: "Пока тихо", text: "Сводка заполнится, когда клиенты начнут писать")
-        case .ready:
-            if store.offline || store.demo == .offline { OfflineBanner().padding(.top, 12) }
-            cards
-            chart
-            todo
-        }
-    }
-
-    private var days: Int { period == "today" ? 1 : (period == "week" ? 7 : 30) }
-    private var per: String { period == "today" ? "за сегодня" : (period == "week" ? "за неделю" : "за месяц") }
-
-    private var cards: some View {
-        let s = store.stats(days: days)
-        return VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                StatCard(tint: Th.tBlue, icon: "userPlus", label: "Новых лидов", value: "\(s.leads)", cap: per) { store.tab = .clients }
-                StatCard(tint: Th.tGreen, icon: "wallet", label: "Оплатили", value: "\(s.paid)", cap: per) { store.tab = .payments }
-            }
-            if period == "today" {
-                HStack(spacing: 10) {
-                    StatCard(tint: Th.tYellow, icon: "trend", label: "Выручка", value: store.money(s.revenue), cap: per) { store.tab = .payments }
-                    StatCard(tint: Th.tLilac, icon: "msgSq", label: "Ждут ответа", value: "\(s.waiting)", cap: "клиент написал, мы молчим") {
-                        store.messagesFilter = "wait"; store.tab = .messages
-                    }
-                }
-            } else {
-                StatCard(tint: Th.tYellow, icon: "trend", label: "Выручка", value: store.money(s.revenue), cap: per) { store.tab = .payments }
-            }
-            WideStat(tint: Th.tPink, icon: "bell", label: "Напомнить сегодня", value: "\(s.remind)", cap: "включая просроченные") {
-                store.show(s.remind == 0 ? "На сегодня напоминаний нет" : "\(s.remind) \(pl(s.remind, "напоминание", "напоминания", "напоминаний")) на сегодня")
-            }
-        }
-        .padding(.horizontal, 12).padding(.top, 16)
-        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: period)
-    }
-
-    private var chart: some View {
-        let s = store.stats(days: 14)
-        let mx = max(1, s.bars.max() ?? 1)
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Входящие по дням").font(Typo.display(15, .semibold)).foregroundStyle(Th.fg)
-                Spacer()
-                Text("последние 14 дней").font(Typo.body(12, .medium)).foregroundStyle(Th.muted)
-            }
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach(0..<14, id: \.self) { i in
-                    BarCol(value: s.bars[i], max: mx, day: i < s.barDays.count ? s.barDays[i] : 0, today: i == 13, index: i)
-                }
-            }
-            .frame(height: 120)
-        }
-        .padding(.horizontal, 14).padding(.top, 16).padding(.bottom, 12)
-        .glassRect(26)
-        .padding(.horizontal, 12).padding(.top, 12)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Входящие за 14 дней: \(s.bars.reduce(0, +)), сегодня \(s.bars.last ?? 0)")
-    }
-
-    private var todo: some View {
-        let list = store.todos
-        return VStack(spacing: 0) {
-            SectTitle(title: "Написать сегодня", small: "\(list.count)")
-            if list.isEmpty {
-                Text("На сегодня всё сделано").font(Typo.body(14)).foregroundStyle(Th.muted)
-                    .frame(maxWidth: .infinity).padding(.vertical, 18).glassRect(20).padding(.horizontal, 12)
-            }
-            VStack(spacing: 8) {
-                ForEach(list) { t in
-                    TodoRow(t: t)
-                }
-            }
-            .padding(.horizontal, 12)
-        }
-    }
-}
-
-enum DataState { case loading, error, empty, ready }
-
-@MainActor
-func dataState(_ store: Store) -> DataState {
-    switch store.demo {
-    case .loading: return .loading
-    case .error: return .error
-    case .empty: return .empty
-    default: break
-    }
-    if !store.loaded && !store.fixture {
-        if store.lastError != nil && store.state.conversations.isEmpty { return .error }
-        if store.state.conversations.isEmpty && store.state.contacts.isEmpty { return .loading }
-    }
-    if store.state.conversations.isEmpty && store.state.contacts.isEmpty { return .empty }
-    return .ready
-}
-
-/// Карточка сводки (.stat): цветная плашка сверху, цифра и подпись слева.
-struct StatCard: View {
-    let tint: Color
-    let icon: String
-    let label: String
-    let value: String
-    let cap: String
-    let action: () -> Void
-
-    var body: some View {
-        Button { haptic(); action() } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 7) {
-                    Icon(name: icon, size: 18, weight: 2)
-                    Text(label).font(Typo.body(13, .semibold)).lineLimit(1)
-                }
-                .foregroundStyle(Th.chipInk)
-                .padding(.horizontal, 12).frame(height: 34)
-                .background(Capsule().fill(tint))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(value).font(Typo.display(25, .semibold)).tracking(-0.5).foregroundStyle(Th.fg)
-                        .lineLimit(1).minimumScaleFactor(0.6).monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text(cap).font(Typo.body(12)).foregroundStyle(Th.muted).lineLimit(2).multilineTextAlignment(.leading)
-                }
-                .padding(.horizontal, 12)
-            }
-            .padding(.horizontal, 6).padding(.top, 6).padding(.bottom, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 24))
-        }
-        .buttonStyle(PressStyle())
-        .glassRect(24)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// Широкая карточка в одну строку (.stat.full).
-struct WideStat: View {
-    let tint: Color
-    let icon: String
-    let label: String
-    let value: String
-    let cap: String
-    let action: () -> Void
-
-    var body: some View {
-        Button { haptic(); action() } label: {
-            HStack(spacing: 8) {
-                HStack(spacing: 7) {
-                    Icon(name: icon, size: 18, weight: 2)
-                    Text(label).font(Typo.body(13, .semibold)).lineLimit(1)
-                }
-                .fixedSize()
-                .foregroundStyle(Th.chipInk)
-                .padding(.horizontal, 12).frame(height: 34)
-                .background(Capsule().fill(tint))
-                Text(value).font(Typo.display(22, .semibold)).foregroundStyle(Th.fg).monospacedDigit().padding(.leading, 6)
-                Text(cap).font(Typo.body(12)).foregroundStyle(Th.muted).lineLimit(2)
-                Spacer(minLength: 0)
-            }
-            .padding(6)
-            .contentShape(RoundedRectangle(cornerRadius: 24))
-        }
-        .buttonStyle(PressStyle())
-        .glassRect(24)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct BarCol: View {
-    let value: Int
-    let max: Int
-    let day: Int
-    let today: Bool
-    let index: Int
-    @State private var grown = false
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Spacer(minLength: 0)
-            Text("\(value)").font(Typo.body(9.5, today ? .bold : .regular)).foregroundStyle(today ? Th.fg : Th.muted)
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(today ? Th.teal : Th.fg.opacity(0.11))
-                .frame(height: Swift.max(5, CGFloat(value) / CGFloat(max) * 72))
-                .scaleEffect(y: grown ? 1 : 0, anchor: .bottom)
-            Text("\(day)").font(Typo.body(9.5, today ? .bold : .regular)).foregroundStyle(today ? Th.fg : Th.muted)
-        }
-        .frame(maxWidth: .infinity)
-        .onAppear { withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(Double(index) * 0.03)) { grown = true } }
-    }
-}
-
-private struct TodoRow: View {
-    @Environment(Store.self) private var store
-    let t: Store.Todo
-
-    var body: some View {
-        let c = store.contact(t.contactId)
-        Button { store.openChat(contactId: t.contactId) } label: {
-            HStack(spacing: 12) {
-                Avatar(name: store.avatarName(c), size: 40)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(store.name(c)).font(Typo.body(15.5, .semibold)).foregroundStyle(Th.fg).lineLimit(1)
-                        if let n = c?.source { NetBadge(network: n, size: 15, ring: false) }
-                    }
-                    HStack(spacing: 8) {
-                        Text(t.text).font(Typo.body(14)).foregroundStyle(Th.muted).lineLimit(1)
-                        Spacer(minLength: 4)
-                        HStack(spacing: 3) {
-                            Icon(name: "clock", size: 13)
-                            Text(Calendar.current.isDateInToday(t.due) ? Fmt.hm(t.due) : Fmt.day(t.due))
-                        }
-                        .font(Typo.body(11.5, .semibold))
-                        .foregroundStyle(t.late ? Th.wine : Th.muted)
-                    }
-                }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(PressStyle())
-        .cardGlass(20)
-        .contextMenu {
-            if let r = t.reminderId { Button { store.doneReminder(r) } label: { Label("Готово", systemImage: "checkmark") } }
-            Button { store.remind(t.contactId, at: Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date().addingTimeInterval(86400)) ?? Date()) } label: {
-                Label("Напомнить завтра", systemImage: "bell")
-            }
-        }
+        .screenBackground(store.wall)
     }
 }

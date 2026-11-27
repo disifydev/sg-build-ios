@@ -79,129 +79,96 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         run: bash tools/shot.sh 00-live
-      - name: Снимок 01-splash (заставка)
+      - name: Снимок 01-login (вход)
         timeout-minutes: 2
-        run: bash tools/shot.sh 01-splash -fixture -screen splash
-      - name: Снимок 02-onboard-notify (объяснение перед уведомлениями)
+        run: bash tools/shot.sh 01-login -fixture -login
+      - name: Снимок 02-code (код из письма)
         timeout-minutes: 2
-        run: bash tools/shot.sh 02-onboard-notify -fixture -screen onboard
-      - name: Снимок 03-onboard-contacts (доступ к контактам)
+        run: bash tools/shot.sh 02-code -fixture -screen code
+      - name: Снимок 03-chats (чаты)
         timeout-minutes: 2
-        run: bash tools/shot.sh 03-onboard-contacts -fixture -screen onboard-contacts
-      - name: Снимок 04-login (вход)
+        run: bash tools/shot.sh 03-chats -fixture
+      - name: Снимок 04-chat (чат)
         timeout-minutes: 2
-        run: bash tools/shot.sh 04-login -fixture -screen login
-      - name: Снимок 05-code (код из письма)
+        run: bash tools/shot.sh 04-chat -fixture -screen chat
+      - name: Снимок 05-client (карточка клиента)
         timeout-minutes: 2
-        run: bash tools/shot.sh 05-code -fixture -screen code
-      - name: Снимок 06-home (сводка)
+        run: bash tools/shot.sh 05-client -fixture -screen client
+      - name: Снимок 06-today (сегодня)
         timeout-minutes: 2
-        run: bash tools/shot.sh 06-home -fixture -screen home
-      - name: Снимок 07-messages (сообщения)
+        run: bash tools/shot.sh 06-today -fixture -screen today
+      - name: Снимок 07-summary (сводка)
         timeout-minutes: 2
-        run: bash tools/shot.sh 07-messages -fixture -screen messages
-      - name: Снимок 08-messages-archive (скрытый архив раскрыт)
+        run: bash tools/shot.sh 07-summary -fixture -screen summary
+      - name: Снимок 08-profile (ещё)
         timeout-minutes: 2
-        run: bash tools/shot.sh 08-messages-archive -fixture -screen messages-archive
-      - name: Снимок 09-archive (архив)
+        run: bash tools/shot.sh 08-profile -fixture -screen profile
+      - name: Снимок 09-folders (папки)
         timeout-minutes: 2
-        run: bash tools/shot.sh 09-archive -fixture -screen archive
-      - name: Снимок 10-chat (чат)
+        run: bash tools/shot.sh 09-folders -fixture -screen folders
+      - name: Снимок 10-archive (архив)
         timeout-minutes: 2
-        run: bash tools/shot.sh 10-chat -fixture -screen chat
-      - name: Снимок 11-chat-menu (меню сообщения с реакциями)
+        run: bash tools/shot.sh 10-archive -fixture -screen archive
+      - name: Снимок 11-partners (партнёры)
         timeout-minutes: 2
-        run: bash tools/shot.sh 11-chat-menu -fixture -screen chatctx
-      - name: Снимок 12-chat-reply (ответ на сообщение)
+        run: bash tools/shot.sh 11-partners -fixture -screen partners
+      - name: Снимок 12-schedule (расписание)
         timeout-minutes: 2
-        run: bash tools/shot.sh 12-chat-reply -fixture -screen chatreply
-      - name: Снимок 13-chat-templates (шаблоны)
+        run: bash tools/shot.sh 12-schedule -fixture -screen schedule
+      - name: Снимок 13-lists (классы и предметы)
         timeout-minutes: 2
-        run: bash tools/shot.sh 13-chat-templates -fixture -screen chattpl
-      - name: Снимок 14-chat-voice (запись голосового на замочке)
+        run: bash tools/shot.sh 13-lists -fixture -screen lists
+      - name: Снимок 14-chat-tg (чат Telegram)
         timeout-minutes: 2
-        run: bash tools/shot.sh 14-chat-voice -fixture -screen chatvoice
-      - name: Снимок 15-chat-circle (запись кружка)
+        run: bash tools/shot.sh 14-chat-tg -fixture -screen chat-tg
+      - name: Снимок 15-chat-reply (ответ)
         timeout-minutes: 2
-        run: bash tools/shot.sh 15-chat-circle -fixture -screen chatcircle
-      - name: Снимок 16-chat-select (выбор сообщений)
+        run: bash tools/shot.sh 15-chat-reply -fixture -screen chat-reply
+      - name: Снимок 16-chat-voice (голосовое)
         timeout-minutes: 2
-        run: bash tools/shot.sh 16-chat-select -fixture -screen chatselect
-      - name: Снимок 17-profile (профиль клиента)
+        run: bash tools/shot.sh 16-chat-voice -fixture -screen chat-voice
+      - name: Снимок 17-chat-preview (превью)
         timeout-minutes: 2
-        run: bash tools/shot.sh 17-profile -fixture -screen profile
-      - name: Снимок 18-edit-contact (правка контакта)
+        run: bash tools/shot.sh 17-chat-preview -fixture -screen chat-preview
+      - name: Снимок 18-viewer (просмотр фото)
         timeout-minutes: 2
-        run: bash tools/shot.sh 18-edit-contact -fixture -screen edit
-      - name: Снимок 19-clients (клиенты)
+        run: bash tools/shot.sh 18-viewer -fixture -screen viewer
+      - name: Снимок 19-note (кружок)
         timeout-minutes: 2
-        run: bash tools/shot.sh 19-clients -fixture -screen clients
-      - name: Снимок 20-payments (оплаты)
+        run: bash tools/shot.sh 19-note -fixture -screen note
+      - name: Снимок 20-toast (отмена)
         timeout-minutes: 2
-        run: bash tools/shot.sh 20-payments -fixture -screen payments
-      - name: Снимок 21-more (ещё)
+        run: bash tools/shot.sh 20-toast -fixture -screen client -toast
+      - name: Снимок 21-chats-folder (папка в чатах)
         timeout-minutes: 2
-        run: bash tools/shot.sh 21-more -fixture -screen more
-      - name: Снимок 22-account (кабинет)
+        run: bash tools/shot.sh 21-chats-folder -fixture -screen chats-folder
+      - name: Снимок 22-chats-select (выбор чатов)
         timeout-minutes: 2
-        run: bash tools/shot.sh 22-account -fixture -screen account
-      - name: Снимок 23-staff (сотрудники)
+        run: bash tools/shot.sh 22-chats-select -fixture -screen chats-select
+      - name: Снимок 23-chats-batch-folder (в папку)
         timeout-minutes: 2
-        run: bash tools/shot.sh 23-staff -fixture -screen staff
-      - name: Снимок 24-security (вход и устройства)
+        run: bash tools/shot.sh 23-chats-batch-folder -fixture -screen chats-folder-sheet
+      - name: Снимок 24-chat-tr (перевод)
         timeout-minutes: 2
-        run: bash tools/shot.sh 24-security -fixture -screen security
-      - name: Снимок 25-lists (классы и предметы)
+        run: bash tools/shot.sh 24-chat-tr -fixture -screen chat-tr
+      - name: Снимок 25-chat-tr-sheet (язык перевода)
         timeout-minutes: 2
-        run: bash tools/shot.sh 25-lists -fixture -screen lists
-      - name: Снимок 26-folders (папки)
+        run: bash tools/shot.sh 25-chat-tr-sheet -fixture -screen chat-tr-sheet
+      - name: Снимок 26-profile-bottom (низ ещё)
         timeout-minutes: 2
-        run: bash tools/shot.sh 26-folders -fixture -screen folders
-      - name: Снимок 27-notifications (уведомления)
+        run: bash tools/shot.sh 26-profile-bottom -fixture -screen profile -bottom
+      - name: Снимок 27-chat-transcript (расшифровка)
         timeout-minutes: 2
-        run: bash tools/shot.sh 27-notifications -fixture -screen notifications
-      - name: Снимок 28-schedule (расписание)
+        run: bash tools/shot.sh 27-chat-transcript -fixture -screen chat-tg -transcript
+      - name: Снимок 28-note-lock (кружок на замке)
         timeout-minutes: 2
-        run: bash tools/shot.sh 28-schedule -fixture -screen schedule
-      - name: Снимок 29-sheet-newpay (новая оплата)
+        run: bash tools/shot.sh 28-note-lock -fixture -screen note-lock
+      - name: Снимок 29-chat-voice-rec (запись голосового)
         timeout-minutes: 2
-        run: bash tools/shot.sh 29-sheet-newpay -fixture -screen newpay
-      - name: Снимок 30-sheet-newclient (новый клиент)
+        run: bash tools/shot.sh 29-chat-voice-rec -fixture -screen chat-voice-rec
+      - name: Снимок 30-staff (сотрудники)
         timeout-minutes: 2
-        run: bash tools/shot.sh 30-sheet-newclient -fixture -screen newclient
-      - name: Снимок 31-sheet-addlesson (новое занятие)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 31-sheet-addlesson -fixture -screen addlesson
-      - name: Снимок 32-sheet-lesson (занятие)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 32-sheet-lesson -fixture -screen lesson
-      - name: Снимок 33-sheet-sched (отправить позже)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 33-sheet-sched -fixture -screen sched
-      - name: Снимок 34-sheet-attach (вложения)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 34-sheet-attach -fixture -screen attach
-      - name: Снимок 35-sheet-fwd (переслать)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 35-sheet-fwd -fixture -screen fwd
-      - name: Снимок 36-sheet-invite (пригласить сотрудника)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 36-sheet-invite -fixture -screen invite
-      - name: Снимок 37-sheet-folder (папка)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 37-sheet-folder -fixture -screen folder
-      - name: Снимок 38-state-loading (загрузка)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 38-state-loading -fixture -screen messages -state loading
-      - name: Снимок 39-state-empty (пусто)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 39-state-empty -fixture -screen messages -state empty
-      - name: Снимок 40-state-error (ошибка)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 40-state-error -fixture -screen home -state error
-      - name: Снимок 41-state-offline (нет интернета)
-        timeout-minutes: 2
-        run: bash tools/shot.sh 41-state-offline -fixture -screen messages -state offline
+        run: bash tools/shot.sh 30-staff -fixture -screen staff
 
       - name: Снимки для App Store (6.9 дюйма)
         timeout-minutes: 8

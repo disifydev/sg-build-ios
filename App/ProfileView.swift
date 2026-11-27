@@ -1,428 +1,422 @@
 import SwiftUI
 
-/// Профиль клиента как в Telegram: действия, контакты, папка, класс, ответственный, заметка, «Добавить в контакты»,
-/// «тот же человек», вкладки медиа / файлы / ссылки / голосовые, удаление чата.
 struct ProfileView: View {
     @Environment(Store.self) private var store
-    let contactId: String
-    @State private var tab = "media"
-    @State private var note = ""
-    @State private var delTarget: Conversation?
-    @FocusState private var noteFocus: Bool
+    @State private var showDelete = false
+    @State private var confirmLogout = false
+
+    @State private var aiAsk = false
+
+    @State private var modules: CabinetModules.Flags?
+
+    /// «5 папок · 3 метки» вместо голой цифры.
+    private var foldersSummary: String {
+        let f: String = ruCount(store.folders.count, "папка", "папки", "папок")
+        let n: Int = store.labels.count
+        return n > 0 ? f + " · " + ruCount(n, "метка", "метки", "меток") : f
+    }
 
     var body: some View {
-        let c = store.contact(contactId)
-        let conv = store.mainConversation(of: contactId)
-        Screen(bottom: 60) {
-            TopBar(back: { store.pop() }) {
-                GlassCap(title: "Изменить") { store.open(.editContact(contactId)) }
-            }
-            if let c {
-                hero(c, conv)
-                actions(c, conv)
-                info(c)
-                book(c)
-                merge(c)
-                Seg(items: [("media", "Медиа", nil), ("files", "Файлы", nil), ("links", "Ссылки", nil), ("voice", "Голосовые", nil)], selection: $tab)
-                    .padding(.horizontal, 16).padding(.top, 18)
-                ProfileMedia(contactId: contactId, tab: tab)
-                Group26 {
-                    GI(title: "Удалить чат", danger: true) {
-                        if let conv { delTarget = conv } else { Task { await store.deleteChat(contactId: contactId); store.pop() } }
+        let user = store.user
+        let version: String = appVersion()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Профиль").font(Typo.display(30)).tracking(-0.9).foregroundStyle(Pal.fg).padding(.horizontal, 4)
+                HStack(spacing: 14) {
+                    Image("BrandIcon").resizable().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.account?.workspaceName.flatMap { $0.isEmpty ? nil : $0 } ?? "Мой кабинет").font(Typo.body(17, .semibold)).foregroundStyle(Pal.fg)
+                        Text((user?.email ?? "") + " · " + (user?.isOwner == true ? "владелец" : "сотрудник")).font(Typo.body(14)).foregroundStyle(Pal.fg2).lineLimit(1)
                     }
+                    Spacer()
                 }
+                .padding(16)
+                .glassRect(24)
                 .padding(.top, 16)
-            } else {
-                EmptyBlock(icon: "user", title: "Клиент не найден", text: "Возможно, его удалили")
-            }
-        }
-        .onAppear { note = c?.note ?? "" }
-        .onDisappear { store.setNote(contactId, note) }
-        .onChange(of: noteFocus) { _, f in if !f { store.setNote(contactId, note) } }
-        .chatDeleteDialog($delTarget)
-        .onChange(of: store.contact(contactId) == nil) { _, gone in if gone { store.pop() } }
-    }
 
-    private func hero(_ c: Contact, _ conv: Conversation?) -> some View {
-        VStack(spacing: 4) {
-            Avatar(name: store.avatarName(c), network: conv?.network ?? c.source, size: 104, url: c.avatar)
-            Text(store.name(c)).font(Typo.display(23, .semibold)).foregroundStyle(Th.fg).multilineTextAlignment(.center)
-                .padding(.top, 10)
-            HStack(spacing: 6) {
-                Text(Net.name(conv?.network ?? c.source))
-                if let s = conv.flatMap({ store.statusLine($0.id) }) { Text("· " + s) }
-                else if let conv { Text("· последнее сообщение " + Fmt.when(store.lastDate(conv)).lowercased()) }
-            }
-            .font(Typo.body(13)).foregroundStyle(Th.muted)
-        }
-        .padding(.horizontal, 20).padding(.bottom, 16)
-    }
-
-    private func actions(_ c: Contact, _ conv: Conversation?) -> some View {
-        HStack(spacing: 8) {
-            Tile(icon: "chat", title: "Чат") { if let conv { store.openChat(conv.id) } else { store.show("С этим клиентом ещё нет переписки") } }
-            Tile(icon: conv?.isMuted == true ? "bell" : "bellOff", title: conv?.isMuted == true ? "Со звуком" : "Без звука") {
-                if let conv { store.setFlag(conv.id, "muted", !conv.isMuted, toast: conv.isMuted ? "Уведомления включены" : "Уведомления выключены") }
-            }
-            Tile(icon: "card", title: "Оплата") { store.sheet = .newPay(contactId: c.id) }
-            Tile(icon: "bell", title: "Напомнить") {
-                let at = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date().addingTimeInterval(86400)) ?? Date()
-                store.remind(c.id, at: at)
-            }
-        }
-        .padding(.horizontal, 12).padding(.bottom, 14)
-    }
-
-    private func info(_ c: Contact) -> some View {
-        VStack(spacing: 0) {
-            if let p = store.phoneOf(c) {
-                IRow(label: "мобильный") { Text(p).foregroundStyle(Th.teal) } action: { UIPasteboard.general.string = p; store.show("Номер скопирован") }
-                Hair(inset: 16)
-            }
-            if let h = c.handle, !h.isEmpty, !PhoneBook.looksLikePhone(h) {
-                IRow(label: "имя пользователя") { Text(h).foregroundStyle(Th.teal) } action: { UIPasteboard.general.string = h; store.show("Ссылка на профиль скопирована") }
-                Hair(inset: 16)
-            }
-            Menu {
-                ForEach(store.folders) { f in
-                    Button { store.setFolder(c.id, f.id) } label: {
-                        if f.id == c.folderId { Label(f.name, systemImage: "checkmark") } else { Text(f.name) }
+                Cap("Работа")
+                VStack(spacing: 0) {
+                    navRow(first: true, icon: "calendar", color: Pal.mint, title: "Расписание", value: todayLessons) { store.open(.schedule) }
+                    navRow(first: false, icon: "folder", color: Pal.sky, title: "Папки и метки", value: foldersSummary) { store.open(.folders) }
+                    navRow(first: false, icon: "graduationcap", color: Pal.apricot, title: "Классы и группы", value: classesSummary) { store.open(.lists) }
+                    navRow(first: false, icon: "person.2", color: Pal.lav, title: "Сотрудники", value: "\(max(1, store.state.team.count))") { store.open(.staff) }
+                    if canSeePartners {
+                        navRow(first: false, icon: "chart.bar", color: Pal.teal, title: "Партнёры", value: "") { store.open(.partners) }
                     }
                 }
-            } label: {
-                IRowLabel(label: "папка") {
-                    HStack(spacing: 7) {
-                        Circle().fill(Color(css: store.folder(c.folderId)?.color)).frame(width: 9, height: 9)
-                        Text(store.folder(c.folderId)?.name ?? "Без папки")
-                    }
-                }
-            }
-            Hair(inset: 16)
-            Menu {
-                Button { store.setClass(c.id, nil) } label: { if c.classes.isEmpty { Label("Без класса", systemImage: "checkmark") } else { Text("Без класса") } }
-                ForEach(store.classes, id: \.self) { k in
-                    Button { store.setClass(c.id, k) } label: {
-                        if c.classes.contains(k) { Label(classTitle(k), systemImage: "checkmark") } else { Text(classTitle(k)) }
-                    }
-                }
-            } label: {
-                IRowLabel(label: "класс") { Text(c.classes.first.map(classTitle) ?? "не указан") }
-            }
-            Hair(inset: 16)
-            Menu {
-                ForEach(store.state.team) { m in
-                    Button { store.setAssignee(c.id, m) } label: {
-                        if m.name == c.assignee { Label(m.name, systemImage: "checkmark") } else { Text(m.name) }
-                    }
-                }
-            } label: {
-                IRowLabel(label: "ответственный") { Text((c.assignee ?? "").isEmpty ? (store.user?.name ?? "—") : (c.assignee ?? "")) }
-            }
-            Hair(inset: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("заметка").font(Typo.body(12.5)).foregroundStyle(Th.muted)
-                TextField("", text: $note, prompt: Text("Что важно помнить об этом клиенте").foregroundColor(Th.faint), axis: .vertical)
-                    .font(Typo.body(15)).foregroundStyle(Th.fg)
-                    .lineLimit(2...8)
-                    .focused($noteFocus)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .glassRect(26)
-        .padding(.horizontal, 12)
-    }
+                .glassRect(24)
 
-    @ViewBuilder private func book(_ c: Contact) -> some View {
-        if store.inBook(c) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) { Icon(name: "book", size: 16); Text("В контактах телефона") }.font(Typo.body(15.5)).foregroundStyle(Th.fg)
-                Text("Имя совпадает с телефонной книгой").font(Typo.body(12.5)).foregroundStyle(Th.muted)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassRect(26).padding(.horizontal, 12).padding(.top, 12)
-        } else {
-            Button { store.addToBook(c) } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) { Icon(name: "userPlus", size: 16); Text("Добавить в контакты") }.font(Typo.body(15.5)).foregroundStyle(Th.teal)
-                    Text("Имя и \(store.phoneOf(c) != nil ? "номер" : "ссылка на соцсеть") появятся в телефонной книге").font(Typo.body(12.5)).foregroundStyle(Th.muted)
+                Cap("Уведомления")
+                VStack(spacing: 0) {
+                    GroupRow(first: true) {
+                        RowIcon(system: "bell", color: Pal.rose)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Новые сообщения и напоминания").foregroundStyle(Pal.fg)
+                            Text("пуш на этот телефон").font(Typo.body(12)).foregroundStyle(Pal.fg3)
+                        }
+                        Spacer()
+                        GlassSwitch(isOn: Binding(get: { store.pushOn }, set: { store.setPush($0) }))
+                    }
+                    GroupRow {
+                        RowIcon(system: "moon", color: Pal.lav)
+                        Text("Тихие часы 23:00–08:00").foregroundStyle(Pal.fg)
+                        Spacer()
+                        GlassSwitch(isOn: Binding(get: { store.quietOn }, set: { store.setQuiet($0) }))
+                    }
                 }
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(RowStyle())
-            .glassRect(26).padding(.horizontal, 12).padding(.top, 12)
-        }
-    }
+                .glassRect(24)
 
-    @ViewBuilder private func merge(_ c: Contact) -> some View {
-        if let s = store.suggestions.first(where: { $0.aId == c.id || $0.bId == c.id }) {
-            let other = s.aId == c.id ? s.bId : s.aId
-            let oc = store.contact(other)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Похоже, это тот же человек: \(store.name(c)) в \(Net.name(c.source)) и \(oc.map { store.name($0) + " в " + Net.name($0.source) } ?? (s.aId == c.id ? s.bName : s.aName) ?? "другой карточке")")
-                    .font(Typo.body(13.5)).foregroundStyle(Th.fg).lineSpacing(2)
-                if let r = s.reason { Text(r).font(Typo.body(13.5)).foregroundStyle(Th.muted) }
+                Cap("Телефонная книга")
+                VStack(spacing: 0) {
+                    GroupRow(first: true) {
+                        RowIcon(system: "person.crop.circle", color: Pal.sky)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Имена из контактов телефона").foregroundStyle(Pal.fg)
+                            Text(store.bookAccess == false ? "нет доступа — разреши в настройках iPhone" : "для номеров WhatsApp и MAX").font(Typo.body(12)).foregroundStyle(Pal.fg3)
+                        }
+                        Spacer()
+                        GlassSwitch(isOn: Binding(get: { store.contactsOn && store.bookAccess != false }, set: { on in
+                            if store.bookAccess == false, let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } else { store.setContactsOn(on) }
+                        }))
+                    }
+                }
+                .glassRect(24)
+
+                Cap("Оформление")
                 HStack(spacing: 8) {
-                    Btn(title: "Объединить", small: true) { Task { await store.merge(keep: c.id, drop: other, yes: true) } }
-                    Btn(title: "Это разные люди", kind: .outline, small: true) { Task { await store.merge(keep: c.id, drop: other, yes: false) } }
-                }
-                .padding(.top, 10)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Th.fg.opacity(0.25), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
-            .padding(.horizontal, 12).padding(.top, 12)
-            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        }
-    }
-}
-
-/// Плитка действия в профиле (.pact).
-private struct Tile: View {
-    let icon: String
-    let title: String
-    let action: () -> Void
-    var body: some View {
-        Button { haptic(); action() } label: {
-            VStack(spacing: 4) {
-                Icon(name: icon)
-                Text(title).font(Typo.body(11.5, .semibold)).lineLimit(1).minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(Th.teal)
-            .frame(maxWidth: .infinity).frame(height: 62)
-            .contentShape(RoundedRectangle(cornerRadius: 18))
-        }
-        .buttonStyle(PressStyle())
-        .glassRect(18)
-    }
-}
-
-/// Строка «подпись сверху, значение снизу» (.irow).
-struct IRow<V: View>: View {
-    let label: String
-    @ViewBuilder var value: () -> V
-    var action: (() -> Void)? = nil
-    var body: some View {
-        Button { action?() } label: { IRowLabel(label: label, value: value) }
-            .buttonStyle(RowStyle())
-            .disabled(action == nil)
-    }
-}
-
-struct IRowLabel<V: View>: View {
-    let label: String
-    @ViewBuilder var value: () -> V
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(Typo.body(12.5)).foregroundStyle(Th.muted)
-            value().font(Typo.body(15.5)).foregroundStyle(Th.fg)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-}
-
-/// Вкладки профиля: всё из переписок клиента.
-struct ProfileMedia: View {
-    @Environment(Store.self) private var store
-    let contactId: String
-    let tab: String
-
-    private var all: [Message] {
-        store.conversations(of: contactId).flatMap { store.messages($0.id) }.sorted { $0.date > $1.date }
-    }
-
-    var body: some View {
-        let msgs = all
-        Group {
-            switch tab {
-            case "media":
-                let media = msgs.filter { $0.kind == "image" || $0.kind == "round" || $0.kind == "video" }
-                if media.isEmpty { empty("Фото и видео из переписки появятся здесь") } else {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
-                        ForEach(media) { m in mediaCell(m) }
+                    ForEach([ThemeMode.system, .light, .dark], id: \.self) { m in
+                        let t: (ThemeMode, String) = (m, m == .system ? "Система" : (m == .light ? "Светлая" : "Тёмная"))
+                        Button { store.setTheme(t.0); haptic() } label: {
+                            Text(t.1).font(Typo.body(14, .semibold))
+                                .foregroundStyle(store.theme == t.0 ? Pal.onAcc : Pal.fg)
+                                .frame(maxWidth: .infinity).frame(height: 44)
+                                .background {
+                                    if store.theme == t.0 { RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Pal.acc) }
+                                }
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressStyle())
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .padding(.horizontal, 12).padding(.top, 12)
                 }
-            case "files":
-                let files = msgs.filter { $0.kind == "file" }
-                if files.isEmpty { empty("Файлов пока нет") } else {
-                    VStack(spacing: 2) {
-                        ForEach(files) { m in
-                            frow(icon: AnyView(Icon(name: "file").foregroundStyle(Th.onTeal)), title: m.att?.name ?? "Файл", sub: Fmt.day(m.date))
+                .padding(8)
+                .glassRect(24)
+
+                Cap("Вход и защита")
+                VStack(spacing: 0) {
+                    GroupRow(first: true) {
+                        RowIcon(system: "faceid", color: Pal.mint)
+                        Text("Вход по Face ID").foregroundStyle(Pal.fg)
+                        Spacer()
+                        GlassSwitch(isOn: Binding(get: { store.faceOn }, set: { store.requestFace($0) }))
+                    }
+                    Button { logoutOthers() } label: {
+                        GroupRow {
+                            RowIcon(system: "iphone.and.arrow.forward", color: Pal.apricot)
+                            Text("Выйти на других устройствах").foregroundStyle(Pal.fg)
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(RowPressStyle())
+                }
+                .glassRect(24)
+
+                Cap("ИИ-помощник")
+                VStack(spacing: 0) {
+                    GroupRow(first: true) {
+                        RowIcon(system: "sparkle", color: Pal.acc)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Перевод и расшифровка через ИИ").foregroundStyle(Pal.fg)
+                            Text("текст и голосовые уходят в ИИ-сервисы").font(Typo.body(12)).foregroundStyle(Pal.fg3)
+                        }
+                        Spacer()
+                        GlassSwitch(isOn: Binding(get: { store.translateOn }, set: { on in
+                            if store.user?.isOwner != true { store.show("Это включает владелец кабинета", ok: false); return }
+                            if on { aiAsk = true } else { Task { await store.setTranslate(false) } }
+                        }))
+                    }
+                }
+                .glassRect(24)
+
+                Cap("Подключённые аккаунты")
+                VStack(spacing: 0) {
+                    if store.state.channels.isEmpty {
+                        GroupRow(first: true) { Text("Пока ничего не подключено").foregroundStyle(Pal.fg2) }
+                    }
+                    ForEach(Array(store.state.channels.enumerated()), id: \.element.id) { i, ch in
+                        let n = NetInfo.of(ch.type)
+                        GroupRow(first: i == 0) {
+                            Circle().fill(n.color).frame(width: 12, height: 12).padding(.horizontal, 9)
+                            Text(n.name).foregroundStyle(Pal.fg)
+                            Spacer()
+                            Text(ch.name.replacingOccurrences(of: "WhatsApp ", with: "")).foregroundStyle(Pal.fg2).lineLimit(1).frame(maxWidth: 170, alignment: .trailing)
+                            Circle().fill(ch.status == "connected" ? Pal.mint : (ch.status == "error" ? Pal.danger : Pal.apricot)).frame(width: 8, height: 8)
                         }
                     }
-                    .padding(.horizontal, 12).padding(.top, 12)
                 }
-            case "links":
-                let links = linksOf(msgs)
-                if links.isEmpty { empty("Ссылок пока нет") } else {
-                    VStack(spacing: 2) {
-                        ForEach(links, id: \.self) { u in
-                            Button { UIApplication.shared.open(u) } label: {
-                                frow(icon: AnyView(Text(String((u.host ?? "?").replacingOccurrences(of: "www.", with: "").prefix(1)).uppercased())
-                                    .font(Typo.body(16, .bold)).foregroundStyle(Th.ink)),
-                                     title: u.host ?? u.absoluteString, sub: u.absoluteString, link: true, bg: Th.tBlue)
-                            }
-                            .buttonStyle(.plain)
+                .glassRect(24)
+
+                VStack(spacing: 0) {
+                    Button { Task { await store.loadState(force: true); store.show("Обновлено") } } label: {
+                        GroupRow(first: true) {
+                            Image(systemName: "arrow.clockwise").font(.system(size: 16))
+                            Text("Обновить данные").font(Typo.body(16, .semibold))
+                            Spacer()
+                            if store.loading { ProgressView().tint(Pal.fg) }
                         }
+                        .foregroundStyle(Pal.acc).contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12).padding(.top, 12)
-                }
-            default:
-                let voices = msgs.filter { $0.kind == "audio" }
-                if voices.isEmpty { empty("Голосовых пока нет") } else {
-                    VStack(spacing: 2) {
-                        ForEach(voices) { m in
-                            frow(icon: AnyView(Icon(name: "play", size: 16).foregroundStyle(Th.onTeal)), title: "Голосовое · " + Fmt.dur(m.att?.duration ?? 0),
-                                 sub: (Calendar.current.isDateInToday(m.date) ? "сегодня, " + Fmt.hm(m.date) : Fmt.day(m.date)), round: true)
+                    .buttonStyle(RowPressStyle())
+                    Button { confirmLogout = true } label: {
+                        GroupRow {
+                            Text("Выйти").font(Typo.body(16, .semibold)); Spacer()
                         }
+                        .foregroundStyle(Pal.acc).contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12).padding(.top, 12)
+                    .buttonStyle(RowPressStyle())
+                    Button { showDelete = true } label: {
+                        GroupRow {
+                            Text("Удалить аккаунт").font(Typo.body(16, .semibold)); Spacer()
+                        }
+                        .foregroundStyle(Pal.danger).contentShape(Rectangle())
+                    }
+                    .buttonStyle(RowPressStyle())
+                }
+                .glassRect(24)
+                .padding(.top, 22)
+
+                Text("Sguardo для iPhone · \(version)")
+                    .font(Typo.body(12)).foregroundStyle(Pal.fg3)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 14)
+                if let e = store.lastError {
+                    Text("Связь: \(e)").font(Typo.body(12)).foregroundStyle(Pal.danger).frame(maxWidth: .infinity).padding(.top, 4)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 130)
         }
-        .animation(.easeOut(duration: 0.25), value: tab)
-    }
-
-    @ViewBuilder private func mediaCell(_ m: Message) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            Color.clear
-            if m.kind == "round" {
-                ZStack { Th.fill8; CamPlaceholderOrThumb(m: m).clipShape(Circle()).padding(14) }
-            } else if m.kind == "video" {
-                VideoThumb(a: m.att!)
-            } else {
-                PhotoThumb(a: m.att!)
-            }
-            if m.kind == "round" {
-                Text(Fmt.dur(m.att?.duration ?? 0)).font(Typo.body(11)).foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(Color.black.opacity(0.45))).padding(6)
-            }
+        .defaultScrollAnchor(ProcessInfo.processInfo.arguments.contains("-bottom") ? .bottom : .top)
+        .refreshable { await store.loadState(force: true); await store.loadAccount() }
+        .screenBackground(store.wall)
+        .sheet(isPresented: $showDelete) { DeleteSheet() }
+        .confirmationDialog("Разрешить отправку в ИИ-сервисы?", isPresented: $aiAsk, titleVisibility: .visible) {
+            Button("Разрешить") { Task { await store.setTranslate(true) } }
+            Button("Не разрешать", role: .cancel) {}
+        } message: {
+            Text("Для перевода и расшифровки текст сообщений клиентов и звук голосовых передаются сторонним ИИ-сервисам: Google (Gemini), DeepL, Groq, Cerebras, Mistral, OpenRouter, Anthropic. Выключить можно здесь же.")
         }
-        .aspectRatio(1, contentMode: .fill)
-        .clipped()
-    }
-
-    private func frow(icon: AnyView, title: String, sub: String, link: Bool = false, round: Bool = false, bg: Color = Th.teal) -> some View {
-        HStack(spacing: 12) {
-            icon.frame(width: 44, height: 44)
-                .background(RoundedRectangle(cornerRadius: round ? 22 : 12, style: .continuous).fill(bg))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(Typo.body(14.5, .semibold)).foregroundStyle(Th.fg).lineLimit(1)
-                Text(sub).font(Typo.body(12.5)).foregroundStyle(link ? Th.teal : Th.muted).lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 6).padding(.vertical, 8)
-    }
-
-    private func empty(_ t: String) -> some View {
-        Text(t).font(Typo.body(14)).foregroundStyle(Th.muted).frame(maxWidth: .infinity).padding(.vertical, 28)
-    }
-
-    private func linksOf(_ msgs: [Message]) -> [URL] {
-        guard let det = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return [] }
-        var out: [URL] = [], seen = Set<String>()
-        for m in msgs where !m.body.isEmpty {
-            let ns = m.body as NSString
-            for r in det.matches(in: m.body, range: NSRange(location: 0, length: ns.length)) {
-                if let u = r.url, !seen.contains(u.absoluteString) { seen.insert(u.absoluteString); out.append(u) }
-            }
-        }
-        return out
-    }
-}
-
-/// Кружок в сетке медиа: демо-кадр или первый кадр видео.
-struct CamPlaceholderOrThumb: View {
-    let m: Message
-    @State private var img: UIImage?
-    var body: some View {
-        Group {
-            if m.att?.url.hasPrefix("fixture:") == true { CamPlaceholder(back: m.att?.url == "fixture:back") }
-            else if let img { Image(uiImage: img).resizable().scaledToFill() }
-            else { Th.fill8 }
-        }
-        .task { if let a = m.att, !a.url.hasPrefix("fixture:"), let u = API.media(a.url) { img = await Thumbs.frame(u) } }
-    }
-}
-
-/// Правка контакта: имя и фамилия (видите только вы), сохранить в телефонной книге, удалить.
-struct EditContactView: View {
-    @Environment(Store.self) private var store
-    let contactId: String
-    @State private var first = ""
-    @State private var last = ""
-    @State private var toBook = false
-    @State private var delAsk = false
-    @State private var busy = false
-
-    var body: some View {
-        let c = store.contact(contactId)
-        Screen(bottom: 40) {
-            HStack {
-                GlassCap(title: "Отмена") { store.pop() }
-                Spacer()
-                Btn(title: "Готово", small: false, busy: busy) { save() }
-                    .frame(height: 44)
-            }
-            .overlay { Text("Изменить").font(Typo.body(16, .bold)).foregroundStyle(Th.fg) }
-            .padding(.horizontal, 16).frame(height: 52)
-            VStack(spacing: 4) {
-                Avatar(name: c.map { store.avatarName($0) } ?? "?", size: 96, url: c?.avatar)
-                Btn(title: "Выбрать фото", kind: .text, small: true) { store.show("Фото берём из профиля клиента в соцсети") }
-            }
-            .padding(.top, 6).padding(.bottom, 16)
-            VStack(spacing: 0) {
-                TextField("", text: $first, prompt: Text("Имя").foregroundColor(Th.faint))
-                    .font(Typo.body(16)).foregroundStyle(Th.fg).padding(.horizontal, 16).frame(height: 50)
-                Hair(inset: 16)
-                TextField("", text: $last, prompt: Text("Фамилия").foregroundColor(Th.faint))
-                    .font(Typo.body(16)).foregroundStyle(Th.fg).padding(.horizontal, 16).frame(height: 50)
-            }
-            .glassRect(26).padding(.horizontal, 12)
-            Hint(text: "Это имя видите только вы. Клиент его не узнает.")
-            Group26 {
-                GI(title: "Сохранить в контактах телефона", sub: c.flatMap { store.phoneOf($0) } ?? "Имя и ссылка на \(Net.name(c?.source))") {
-                    Switch(on: toBook) { toBook.toggle() }
-                }
-            }
-            Group26 {
-                GI(title: "Удалить контакт", danger: true) { delAsk = true }
-            }
-            .padding(.top, 14)
-        }
-        .onAppear {
-            let n = c.map { store.name($0) } ?? ""
-            let parts = n.split(separator: " ", maxSplits: 1).map(String.init)
-            first = parts.first ?? ""
-            last = parts.count > 1 ? parts[1] : ""
-            toBook = c.map { store.inBook($0) } ?? false
-        }
-        .confirmationDialog("Удалить контакт?", isPresented: $delAsk, titleVisibility: .visible) {
-            Button("Удалить контакт", role: .destructive) {
-                Task { await store.deleteChat(contactId: contactId); store.path = [] }
-            }
+        .confirmationDialog("Выйти из кабинета на этом телефоне?", isPresented: $confirmLogout, titleVisibility: .visible) {
+            Button("Выйти", role: .destructive) { Task { await store.logout() } }
             Button("Отмена", role: .cancel) {}
-        } message: { Text("Клиент и его переписки пропадут из кабинета.") }
+        }
+        .task {
+            if store.account == nil { await store.loadAccount() }
+            if !store.fixture { modules = try? await API.get(CabinetModules.self, "/api/me/modules/").modules }
+            if store.lessons.isEmpty { await store.loadLessons() }
+        }
     }
 
-    private func save() {
-        guard let c = store.contact(contactId) else { return }
-        let n = [first, last].map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
-        busy = true
+    private var canSeePartners: Bool { store.fixture || modules?.partners == true || store.user?.features?.partners == true }
+
+    private var todayLessons: String {
+        let n = store.lessons(on: Date()).count
+        return n > 0 ? "сегодня " + ruCount(n, "занятие", "занятия", "занятий") : ""
+    }
+
+    private var classesSummary: String {
+        let c = store.classes.count, g = store.groups.count
+        if c == 0 && g == 0 { return "" }
+        return ruCount(c, "класс", "класса", "классов") + (g > 0 ? " · " + ruCount(g, "группа", "группы", "групп") : "")
+    }
+
+    private func logoutOthers() {
         Task {
-            if !n.isEmpty && n != store.name(c) { _ = await store.rename(contactId, n) }
-            if toBook && !store.inBook(c) { store.addToBook(store.contact(contactId) ?? c) } else { store.show("Контакт сохранён") }
-            busy = false
-            store.pop()
+            if store.fixture { store.show("Другие устройства вышли из кабинета"); return }
+            do {
+                _ = try await API.send("DELETE", "/api/account/sessions/")
+                store.show("Другие устройства вышли из кабинета")
+            } catch { store.show(friendly(error), ok: false) }
         }
+    }
+
+    private func navRow(first: Bool, icon: String, color: Color, title: String, value: String, action: @escaping () -> Void) -> some View {
+        Button { haptic(); action() } label: {
+            GroupRow(first: first) {
+                RowIcon(system: icon, color: color)
+                Text(title).foregroundStyle(Pal.fg)
+                Spacer()
+                Text(value).font(Typo.body(13)).foregroundStyle(Pal.fg2).lineLimit(1)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Pal.fg3)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowPressStyle())
+    }
+}
+
+func appVersion() -> String {
+    let info: [String: Any] = Bundle.main.infoDictionary ?? [:]
+    let short: String = info["CFBundleShortVersionString"] as? String ?? "1.0"
+    let build: String = info["CFBundleVersion"] as? String ?? "1"
+    return "\(short) (\(build))"
+}
+
+struct FoldersView: View {
+    @Environment(Store.self) private var store
+    @State private var names: [String: String] = [:]
+    @State private var showLabel = false
+    @State private var deleting: Folder?
+    @State private var removingLabel: String?
+
+    private func askRemove(_ l: String) {
+        let used = store.state.contacts.contains { ($0.tags ?? []).contains(l) }
+        if used { removingLabel = l } else { store.removeExtraLabel(l); store.show("Метка «\(l)» удалена") }
+    }
+
+    /// Снять метку со всех клиентов (по одному действию на клиента) и из списка приложения.
+    private func removeEverywhere(_ l: String) async {
+        let owners = store.state.contacts.filter { ($0.tags ?? []).contains(l) }
+        var failed = 0
+        for c in owners {
+            let tags: [String] = (c.tags ?? []).filter { $0 != l }
+            let ok = await store.act(["type": "updateContact", "contactId": c.id, "tags": tags])
+            if !ok { failed += 1 }
+        }
+        store.removeExtraLabel(l)
+        if failed == 0 { store.show("Метка «\(l)» снята у \(owners.count) клиентов") }
+    }
+
+    var body: some View {
+        let owner = store.user?.isOwner == true
+        VStack(spacing: 0) {
+            HStack {
+                CircleButton(system: "chevron.left", iconSize: 18) { commitNames(); store.pop() }
+                Spacer()
+                Button { commitNames(); store.pop() } label: {
+                    Text("Готово").font(Typo.body(15, .semibold)).padding(.horizontal, 16).frame(height: 40).primaryFill(20)
+                }
+                .buttonStyle(PressStyle())
+            }
+            .padding(.horizontal, 16).padding(.top, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Папки").font(Typo.display(30)).tracking(-0.9).foregroundStyle(Pal.fg).padding(.horizontal, 4).padding(.top, 14)
+                    Text(owner ? "Папка — этап сделки, у клиента она одна. Нажми на название, чтобы переименовать, на кружок — сменить цвет, стрелки — порядок." : "Папки настраивает владелец кабинета.")
+                        .font(Typo.body(15)).foregroundStyle(Pal.fg2).lineSpacing(3).padding(.horizontal, 4).padding(.top, 8)
+                    Cap("Мои папки")
+                    VStack(spacing: 0) {
+                        ForEach(Array(store.folders.enumerated()), id: \.element.id) { i, f in
+                            GroupRow(first: i == 0) {
+                                Button { cycleColor(f) } label: {
+                                    Circle().fill(Color(css: f.color)).frame(width: 22, height: 22)
+                                }
+                                .disabled(!owner)
+                                TextField("", text: Binding(get: { names[f.id] ?? f.name }, set: { names[f.id] = $0 }))
+                                    .font(Typo.body(16)).foregroundStyle(Pal.fg)
+                                    .disabled(!owner)
+                                    .submitLabel(.done)
+                                    .onSubmit { commit(f) }
+                                Text("\(store.state.contacts.filter { $0.folderId == f.id }.count)").font(Typo.body(14)).foregroundStyle(Pal.fg2)
+                                if owner {
+                                    Button { Task { await store.act(["type": "moveFolder", "id": f.id, "dir": -1]) } } label: {
+                                        Image(systemName: "chevron.up").font(.system(size: 15, weight: .semibold)).frame(width: 30, height: 30)
+                                    }
+                                    .foregroundStyle(Pal.fg.opacity(i == 0 ? 0.2 : 0.7))
+                                    .disabled(i == 0)
+                                    Button { Task { await store.act(["type": "moveFolder", "id": f.id, "dir": 1]) } } label: {
+                                        Image(systemName: "chevron.down").font(.system(size: 15, weight: .semibold)).frame(width: 30, height: 30)
+                                    }
+                                    .foregroundStyle(Pal.fg.opacity(i == store.folders.count - 1 ? 0.2 : 0.7))
+                                    .disabled(i == store.folders.count - 1)
+                                    Button { deleting = f } label: {
+                                        Image(systemName: "xmark").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30)
+                                    }
+                                    .foregroundStyle(Pal.fg.opacity(0.55))
+                                }
+                            }
+                        }
+                        if owner {
+                            Button { Task { await store.act(["type": "addFolder", "name": "Новая папка", "color": "#B9A9DE"], ok: "Папка добавлена") } } label: {
+                                GroupRow {
+                                    Image(systemName: "plus").font(.system(size: 17, weight: .semibold))
+                                    Text("Новая папка").font(Typo.body(16, .semibold))
+                                    Spacer()
+                                }
+                                .foregroundStyle(Pal.acc).contentShape(Rectangle())
+                            }
+                            .buttonStyle(RowPressStyle())
+                        }
+                    }
+                    .glassRect(24)
+                    .buttonStyle(PressStyle())
+
+                    Cap("Метки")
+                    FlowLayout(spacing: 8) {
+                        ForEach(store.labels, id: \.self) { l in
+                            HStack(spacing: 4) {
+                                Text(l).font(Typo.body(13, .semibold))
+                                Button { askRemove(l) } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).frame(width: 20, height: 20) }
+                                    .accessibilityLabel("Удалить метку \(l)")
+                            }
+                            .foregroundStyle(Pal.ink)
+                            .padding(.leading, 14).padding(.trailing, 6)
+                            .frame(height: 32)
+                            .background(Capsule().fill(labelColor(l)))
+                        }
+                        Button { showLabel = true } label: {
+                            Text("+ Метка").font(Typo.body(13, .semibold)).foregroundStyle(Pal.fg)
+                                .padding(.horizontal, 14).frame(height: 32)
+                                .overlay(Capsule().stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 3])).foregroundStyle(Pal.fg.opacity(0.4)))
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glassRect(24)
+                    Text("Снять метку с одного клиента — крестик на метке в чате или нажатие в карточке. Крестик здесь удаляет метку у всех клиентов.")
+                        .font(Typo.body(13)).foregroundStyle(Pal.fg3).lineSpacing(3).padding(.horizontal, 16).padding(.top, 8)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
+            }
+        }
+        .screenBackground(store.wall)
+        .sheet(isPresented: $showLabel) { LabelSheet(contactId: nil) }
+        .confirmationDialog("Удалить метку «\(removingLabel ?? "")» у всех клиентов?", isPresented: Binding(get: { removingLabel != nil }, set: { if !$0 { removingLabel = nil } }), titleVisibility: .visible) {
+            if let l = removingLabel {
+                Button("Удалить у всех", role: .destructive) {
+                    removingLabel = nil
+                    Task { await removeEverywhere(l) }
+                }
+            }
+            Button("Отмена", role: .cancel) { removingLabel = nil }
+        }
+        .confirmationDialog("Удалить папку «\(deleting?.name ?? "")»?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            if let f = deleting, let to = store.folders.first(where: { $0.id != f.id }) {
+                Button("Удалить, клиентов — в «\(to.name)»", role: .destructive) {
+                    Task { await store.act(["type": "removeFolder", "id": f.id, "moveTo": to.id], ok: "Папка удалена, клиенты — в «\(to.name)»") }
+                    deleting = nil
+                }
+            }
+            Button("Отмена", role: .cancel) { deleting = nil }
+        }
+    }
+
+    private func commit(_ f: Folder) {
+        guard let n = names[f.id]?.trimmingCharacters(in: .whitespaces), !n.isEmpty, n != f.name else { return }
+        Task { await store.act(["type": "updateFolder", "id": f.id, "name": String(n.prefix(60))], ok: "Переименовано") }
+    }
+
+    private func commitNames() {
+        for f in store.folders { commit(f) }
+    }
+
+    private func cycleColor(_ f: Folder) {
+        let pal = Pal.folderHex
+        let i = pal.firstIndex(of: (f.color ?? "").uppercased()) ?? -1
+        let next = pal[(i + 1) % pal.count]
+        Task { await store.act(["type": "updateFolder", "id": f.id, "color": next]) }
     }
 }

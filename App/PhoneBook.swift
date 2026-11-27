@@ -60,7 +60,7 @@ enum PhoneBook {
             c.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: phone))]
         }
         if let handle, !handle.isEmpty, !looksLikePhone(handle), let url = profileURL(network: network, handle: handle) {
-            c.urlAddresses = [CNLabeledValue(label: Net.name(network), value: url as NSString)]
+            c.urlAddresses = [CNLabeledValue(label: NetInfo.of(network).name, value: url as NSString)]
         }
         c.note = "Клиент Sguardo"
         let req = CNSaveRequest()

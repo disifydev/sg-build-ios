@@ -2,11 +2,10 @@ import Foundation
 
 /// Бэкенд Sguardo: https://sguardo.ru, API по адресам https://sguardo.ru/api/… (со слэшем на конце, иначе 308).
 /// Сессия — cookie `sid` (httpOnly, путь "/") в общем HTTPCookieStorage: её же видят картинки и плееры.
-/// Файлы кабинета отдаются и по старым адресам "/api/files/…", и по новым "/lk/api/files/…".
+/// Файлы отдаются и по старым адресам "/api/files/…", и по новым "/lk/api/files/…".
 enum API {
     static let origin = URL(string: "https://sguardo.ru")!
     static let basePath = ""
-    static let webCabinet = URL(string: "https://sguardo.ru/lk/")!
 
     static let session: URLSession = {
         let c = URLSessionConfiguration.default
@@ -28,7 +27,7 @@ enum API {
         return comps.url!
     }
 
-    /// Ссылка на файл из данных кабинета ("/api/files/m/…", "/lk/api/files/m/…") → полный адрес на sguardo.ru.
+    /// Ссылка на файл из данных кабинета ("/sguardo/api/files/m/…") → полный адрес.
     /// Абсолютные адреса принимаются только https; куки к ним прикладываются лишь для своего хоста (isOwn).
     static func media(_ raw: String) -> URL? {
         if raw.lowercased().hasPrefix("http") {
@@ -37,7 +36,6 @@ enum API {
         }
         var path = raw
         if !path.hasPrefix("/") { path = "/" + path }
-        // старые ссылки из времён disify.dev/sguardo
         if path.hasPrefix("/sguardo/api/") { path = String(path.dropFirst("/sguardo".count)) }
         if !path.contains("?") && !path.hasSuffix("/") { path += "/" }
         return URL(string: origin.absoluteString + path)
@@ -94,13 +92,13 @@ enum API {
         return try decode(type, data)
     }
 
-    static func post<T: Decodable>(_ type: T.Type, _ path: String, json: [String: Any]) async throws -> T {
-        let (data, _) = try await send("POST", path, json: json)
+    static func call<T: Decodable>(_ type: T.Type, _ method: String, _ path: String, json: [String: Any]? = nil) async throws -> T {
+        let (data, _) = try await send(method, path, json: json)
         return try decode(type, data)
     }
 
-    static func call<T: Decodable>(_ type: T.Type, _ method: String, _ path: String, json: [String: Any]? = nil) async throws -> T {
-        let (data, _) = try await send(method, path, json: json)
+    static func post<T: Decodable>(_ type: T.Type, _ path: String, json: [String: Any]) async throws -> T {
+        let (data, _) = try await send("POST", path, json: json)
         return try decode(type, data)
     }
 
@@ -153,7 +151,7 @@ func friendly(_ error: Error) -> String {
     let ns = error as NSError
     if ns.domain == NSURLErrorDomain {
         switch ns.code {
-        case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorDataNotAllowed: return "Нет интернета"
+        case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost: return "Нет интернета"
         case NSURLErrorTimedOut: return "Сервер долго не отвечает"
         case NSURLErrorCancelled: return "Отменено"
         default: return "Сеть недоступна"

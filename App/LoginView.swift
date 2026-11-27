@@ -26,32 +26,33 @@ struct LoginView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: passMode)
         .onAppear {
             #if DEBUG
-            if let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-screen"), i + 1 < ProcessInfo.processInfo.arguments.count,
-               ProcessInfo.processInfo.arguments[i + 1] == "code" { email = "demo@sguardo.ru"; step = 1 }
+            if ProcessInfo.processInfo.arguments.contains("code") { email = "demo@sguardo.ru"; step = 1 }
             #endif
         }
     }
 
     private var emailStep: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 30)
+            Spacer(minLength: 40)
             Image("BrandIcon")
                 .resizable()
-                .frame(width: 96, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 21.6, style: .continuous))
-                .shadow(color: Color(hex: 0x0F3D42).opacity(0.3), radius: 15, y: 16)
+                .frame(width: 104, height: 104)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .shadow(color: Pal.acc.opacity(0.3), radius: 18, y: 14)
             Text("Sguardo")
-                .font(Typo.display(30, .bold))
-                .tracking(-0.6)
-                .foregroundStyle(Th.fg)
-                .padding(.top, 22)
-            Text("все клиенты в одном окне")
-                .font(Typo.body(15))
-                .foregroundStyle(Th.muted)
-                .padding(.top, 8)
+                .font(Typo.display(34))
+                .tracking(-1)
+                .foregroundStyle(Pal.fg)
+                .padding(.top, 24)
+            Text("Все переписки с клиентами — в одном месте")
+                .font(Typo.body(16))
+                .foregroundStyle(Pal.fg2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+                .padding(.top, 10)
             Spacer()
             VStack(spacing: 12) {
-                field(icon: "mail", placeholder: "Почта", text: $email, secure: false)
+                field(icon: "envelope", placeholder: "Почта", text: $email, secure: false)
                     .focused($focus, equals: .email)
                     .textContentType(.username)
                     .keyboardType(.emailAddress)
@@ -66,20 +67,31 @@ struct LoginView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if let error {
-                    Text(error).font(Typo.body(14)).foregroundStyle(Th.danger).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+                    Text(error).font(Typo.body(14)).foregroundStyle(Pal.danger).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
                         .transition(.opacity)
                 }
-                Btn(title: passMode ? "Войти" : "Получить код", wide: true, busy: busy, action: submit)
-                    .accessibilityIdentifier("login-submit")
-                Btn(title: passMode ? "Войти по коду из письма" : "Войти по паролю", kind: .text) {
-                    passMode.toggle(); error = nil
+                Button(action: submit) {
+                    ZStack {
+                        if busy { ProgressView().tint(Pal.onAcc) } else { Text(passMode ? "Войти" : "Получить код").font(Typo.body(17, .semibold)) }
+                    }
+                    .frame(maxWidth: .infinity).frame(height: 54)
+                    .primaryFill()
+                }
+                .buttonStyle(PressStyle())
+                .disabled(busy)
+                .accessibilityIdentifier("login-submit")
+                Button {
+                    passMode.toggle(); error = nil; haptic()
+                } label: {
+                    Text(passMode ? "Войти по коду из письма" : "Войти по паролю")
+                        .font(Typo.body(15, .medium)).foregroundStyle(Pal.acc).frame(height: 40)
                 }
             }
             .padding(16)
-            .glassRect(32)
+            .glassRect(30)
             Text("Кабинет создаётся на sguardo.ru.\nВход той же почтой, что в веб-кабинете.")
                 .font(Typo.body(13))
-                .foregroundStyle(Th.muted)
+                .foregroundStyle(Pal.fg3)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .padding(.top, 16)
@@ -90,32 +102,32 @@ struct LoginView: View {
 
     private var codeStep: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GlassCircle(icon: "chevL", label: "Назад") { step = 0; code = ""; error = nil }
+            CircleButton(system: "chevron.left", iconSize: 18) { step = 0; code = ""; error = nil }
                 .padding(.top, 8)
             Text("Код из письма")
-                .font(Typo.display(28, .bold))
-                .tracking(-0.6)
-                .foregroundStyle(Th.fg)
+                .font(Typo.display(28))
+                .tracking(-0.8)
+                .foregroundStyle(Pal.fg)
                 .padding(.top, 28)
-            (Text("Отправили 6 цифр на ") + Text(email).foregroundColor(Th.fg).font(Typo.body(16, .medium)) + Text(". Письмо может идти до минуты."))
+            (Text("Отправили 6 цифр на ") + Text(email).foregroundColor(Pal.fg).font(Typo.body(16, .medium)) + Text(". Письмо может идти до минуты."))
                 .font(Typo.body(16))
-                .foregroundStyle(Th.muted)
+                .foregroundStyle(Pal.fg2)
                 .lineSpacing(4)
                 .padding(.top, 12)
             // Обычное видимое поле: автоподстановка кода из Почты/Сообщений (над клавиатурой) надёжно вставляет только в видимое поле
-            TextField("", text: $code, prompt: Text("000000").foregroundColor(Th.faint))
+            TextField("", text: $code, prompt: Text("000000").foregroundColor(Pal.fg3))
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 .focused($focus, equals: .code)
                 .font(Typo.display(30))
                 .kerning(14)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Th.fg)
-                .tint(Th.teal)
+                .foregroundStyle(Pal.fg)
+                .tint(Pal.acc)
                 .frame(maxWidth: .infinity)
                 .frame(height: 64)
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Th.glass2))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(focus == .code ? Th.teal : Th.glassEdge, lineWidth: focus == .code ? 2 : 0.5))
+                .glass(.light, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Pal.acc.opacity(focus == .code ? 0.8 : 0), lineWidth: 2))
                 .padding(.top, 30)
                 .accessibilityIdentifier("code-field")
                 .onChange(of: code) { _, v in
@@ -124,7 +136,7 @@ struct LoginView: View {
                     if digits.count == 6 { verify() }
                 }
             if let error {
-                Text(error).font(Typo.body(14)).foregroundStyle(Th.danger).padding(.top, 14)
+                Text(error).font(Typo.body(14)).foregroundStyle(Pal.danger).padding(.top, 14)
             }
             // Системная кнопка вставки: без окна «Разрешить вставку», работает всегда
             PasteButton(payloadType: String.self) { items in
@@ -133,59 +145,56 @@ struct LoginView: View {
             }
             .labelStyle(.titleAndIcon)
             .buttonBorderShape(.capsule)
-            .tint(Th.teal)
+            .tint(Pal.acc)
             .frame(maxWidth: .infinity)
             .padding(.top, 28)
-            Btn(title: "Отправить код ещё раз", kind: .text, wide: true) { requestCode(resend: true) }
-                .padding(.top, 6)
+            Button { requestCode(resend: true) } label: {
+                Text("Отправить код ещё раз").font(Typo.body(15, .medium)).foregroundStyle(Pal.acc).frame(maxWidth: .infinity).frame(height: 44)
+            }
+            .padding(.top, 6)
             Spacer()
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .onAppear { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { focus = .code } }
-    }
-
-    private func codeCell(_ i: Int) -> some View {
-        let chars = Array(code)
-        let active = i == min(code.count, 5) && focus == .code
-        return Text(i < chars.count ? String(chars[i]) : "")
-            .font(Typo.display(24))
-            .foregroundStyle(Th.fg)
-            .frame(width: 48, height: 60)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Th.glass2))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(active ? Th.teal : Th.glassEdge, lineWidth: active ? 2 : 0.5))
-            .scaleEffect(i < chars.count ? 1 : 0.97)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: chars.count)
     }
 
     @ViewBuilder
     private func field(icon: String, placeholder: String, text: Binding<String>, secure: Bool) -> some View {
         HStack(spacing: 10) {
-            Icon(name: icon, size: 18).foregroundStyle(Th.muted)
+            Image(systemName: icon).font(.system(size: 18)).foregroundStyle(Pal.fg.opacity(0.75)).frame(width: 22)
             Group {
                 if secure {
-                    SecureField("", text: text, prompt: Text(placeholder).foregroundColor(Th.faint))
+                    SecureField("", text: text, prompt: Text(placeholder).foregroundColor(Pal.fg3))
                 } else {
-                    TextField("", text: text, prompt: Text(placeholder).foregroundColor(Th.faint))
+                    TextField("", text: text, prompt: Text(placeholder).foregroundColor(Pal.fg3))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
             }
             .font(Typo.body(17))
-            .foregroundStyle(Th.fg)
+            .foregroundStyle(Pal.fg)
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 16)
         .frame(height: 54)
-        .background(Capsule().fill(Th.fill6))
+        .glass(.light, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    /// Код из вставленного текста: 6 цифр подряд (или «123 456», «123-456»).
+    static func extractCode(_ s: String) -> String {
+        if let r = s.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(s[r]) }
+        let compact = s.replacingOccurrences(of: #"(\d)[\s\-](?=\d)"#, with: "$1", options: .regularExpression)
+        if let r = compact.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(compact[r]) }
+        return String(s.filter(\.isNumber).prefix(6))
     }
 
     private var cleanEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
 
     private func submit() {
         guard !busy else { return }
-        guard cleanEmail.contains("@"), cleanEmail.contains(".") else { withAnimation { error = "Введите почту" }; return }
+        guard cleanEmail.contains("@"), cleanEmail.contains(".") else { withAnimation { error = "Впиши почту" }; return }
         UserDefaults.standard.set(cleanEmail, forKey: "lastEmail")
         if passMode {
-            guard !password.isEmpty else { withAnimation { error = "Введите пароль" }; return }
+            guard !password.isEmpty else { withAnimation { error = "Впиши пароль" }; return }
             busy = true; error = nil
             Task {
                 defer { busy = false }
@@ -217,14 +226,6 @@ struct LoginView: View {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
-    }
-
-    /// Код из вставленного текста: сначала ищем шесть цифр подряд (письмо целиком, «123 456»), иначе первые шесть цифр.
-    static func extractCode(_ s: String) -> String {
-        if let r = s.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(s[r]) }
-        let compact = s.replacingOccurrences(of: #"(\d)[\s\-](?=\d)"#, with: "$1", options: .regularExpression)
-        if let r = compact.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(compact[r]) }
-        return String(s.filter(\.isNumber).prefix(6))
     }
 
     private func verify() {
