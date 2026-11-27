@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ru</string>
+	<key>CFBundleDisplayName</key>
+	<string>Sguardo</string>
+	<key>CFBundleName</key>
+	<string>Sguardo</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID защищает вход в кабинет Sguardo на этом телефоне.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Чтобы показывать в чатах имена клиентов из вашей телефонной книги и добавлять клиентов в контакты.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Чтобы записывать голосовые сообщения и кружки клиентам.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Чтобы записывать видеосообщения-кружки клиентам.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Чтобы сохранять фото и видео из переписки в галерею.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Unbounded-500.ttf</string>
+		<string>Unbounded-600.ttf</string>
+		<string>Unbounded-700.ttf</string>
+		<string>Onest-400.ttf</string>
+		<string>Onest-500.ttf</string>
+		<string>Onest-600.ttf</string>
+		<string>Onest-700.ttf</string>
+	</array>
+</dict>
+</plist>

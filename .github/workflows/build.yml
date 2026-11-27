@@ -1,0 +1,299 @@
+# Сборка Sguardo для iPhone: компиляция → снимки всех экранов в симуляторе (без падений и белых экранов)
+# → подпись (ручная: p12 + профиль App Store) → загрузка в App Store Connect (TestFlight).
+# Минуты macOS дорогие: один прогон делает всё сразу, снимки уходят в ветку shots/<номер>.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "tools/**"]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Загрузить в App Store Connect"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      SCHEME: Sguardo
+      BUNDLE_ID: dev.disify.batch
+      PROFILE_NAME: Sguardo AppStore Push2
+      # номер сборки выше уже загруженных в эту запись App Store Connect (у Fewls была 6)
+      BUILD_BASE: "200"
+      DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Инструменты
+        run: |
+          xcodebuild -version
+          brew install xcodegen >/dev/null 2>&1 || brew install xcodegen
+          echo "BUILD_NUMBER=$((BUILD_BASE + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+
+      - name: Сборка для симулятора
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild build -project "$SCHEME.xcodeproj" -scheme "$SCHEME" -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CURRENT_PROJECT_VERSION="$BUILD_NUMBER" > build-sim.log 2>&1 || {
+              grep -E "error:|Error:" build-sim.log | sort -u | head -80; tail -30 build-sim.log; exit 1; }
+          grep -E "warning:" build-sim.log | sort -u | head -30 || true
+          ls build/dd/Build/Products/Debug-iphonesimulator/
+
+      - name: Симулятор
+        id: sim
+        run: |
+          set -e
+          LIST=$(xcrun simctl list devices available)
+          UDID=$(echo "$LIST" | grep -E "^ +iPhone 17 Pro \(" | head -1 | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          [ -n "$UDID" ] || UDID=$(echo "$LIST" | grep -E "^ +iPhone .*\(" | tail -1 | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/')
+          echo "$LIST" | grep "$UDID"
+          echo "udid=$UDID" >> $GITHUB_OUTPUT
+          echo "$UDID" > .udid
+          xcrun simctl boot "$UDID" || true
+          for i in $(seq 1 60); do
+            xcrun simctl list devices | grep "$UDID" | grep -q Booted && break; sleep 3
+          done
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/$SCHEME.app
+
+      - name: Снимок 00-live (живой запуск без данных, сервер отвечает 401 и открывается вход)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 00-live
+      - name: Снимок 01-splash (заставка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 01-splash -fixture -screen splash
+      - name: Снимок 02-onboard-notify (объяснение перед уведомлениями)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 02-onboard-notify -fixture -screen onboard
+      - name: Снимок 03-onboard-contacts (доступ к контактам)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 03-onboard-contacts -fixture -screen onboard-contacts
+      - name: Снимок 04-login (вход)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 04-login -fixture -screen login
+      - name: Снимок 05-code (код из письма)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 05-code -fixture -screen code
+      - name: Снимок 06-home (сводка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 06-home -fixture -screen home
+      - name: Снимок 07-messages (сообщения)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 07-messages -fixture -screen messages
+      - name: Снимок 08-messages-archive (скрытый архив раскрыт)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 08-messages-archive -fixture -screen messages-archive
+      - name: Снимок 09-archive (архив)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 09-archive -fixture -screen archive
+      - name: Снимок 10-chat (чат)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 10-chat -fixture -screen chat
+      - name: Снимок 11-chat-menu (меню сообщения с реакциями)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 11-chat-menu -fixture -screen chatctx
+      - name: Снимок 12-chat-reply (ответ на сообщение)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 12-chat-reply -fixture -screen chatreply
+      - name: Снимок 13-chat-templates (шаблоны)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 13-chat-templates -fixture -screen chattpl
+      - name: Снимок 14-chat-voice (запись голосового на замочке)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 14-chat-voice -fixture -screen chatvoice
+      - name: Снимок 15-chat-circle (запись кружка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 15-chat-circle -fixture -screen chatcircle
+      - name: Снимок 16-chat-select (выбор сообщений)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 16-chat-select -fixture -screen chatselect
+      - name: Снимок 17-profile (профиль клиента)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 17-profile -fixture -screen profile
+      - name: Снимок 18-edit-contact (правка контакта)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 18-edit-contact -fixture -screen edit
+      - name: Снимок 19-clients (клиенты)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 19-clients -fixture -screen clients
+      - name: Снимок 20-payments (оплаты)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 20-payments -fixture -screen payments
+      - name: Снимок 21-more (ещё)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 21-more -fixture -screen more
+      - name: Снимок 22-account (кабинет)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 22-account -fixture -screen account
+      - name: Снимок 23-staff (сотрудники)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 23-staff -fixture -screen staff
+      - name: Снимок 24-security (вход и устройства)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 24-security -fixture -screen security
+      - name: Снимок 25-lists (классы и предметы)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 25-lists -fixture -screen lists
+      - name: Снимок 26-folders (папки)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 26-folders -fixture -screen folders
+      - name: Снимок 27-notifications (уведомления)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 27-notifications -fixture -screen notifications
+      - name: Снимок 28-schedule (расписание)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 28-schedule -fixture -screen schedule
+      - name: Снимок 29-sheet-newpay (новая оплата)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 29-sheet-newpay -fixture -screen newpay
+      - name: Снимок 30-sheet-newclient (новый клиент)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 30-sheet-newclient -fixture -screen newclient
+      - name: Снимок 31-sheet-addlesson (новое занятие)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 31-sheet-addlesson -fixture -screen addlesson
+      - name: Снимок 32-sheet-lesson (занятие)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 32-sheet-lesson -fixture -screen lesson
+      - name: Снимок 33-sheet-sched (отправить позже)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 33-sheet-sched -fixture -screen sched
+      - name: Снимок 34-sheet-attach (вложения)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 34-sheet-attach -fixture -screen attach
+      - name: Снимок 35-sheet-fwd (переслать)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 35-sheet-fwd -fixture -screen fwd
+      - name: Снимок 36-sheet-invite (пригласить сотрудника)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 36-sheet-invite -fixture -screen invite
+      - name: Снимок 37-sheet-folder (папка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 37-sheet-folder -fixture -screen folder
+      - name: Снимок 38-state-loading (загрузка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 38-state-loading -fixture -screen messages -state loading
+      - name: Снимок 39-state-empty (пусто)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 39-state-empty -fixture -screen messages -state empty
+      - name: Снимок 40-state-error (ошибка)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 40-state-error -fixture -screen home -state error
+      - name: Снимок 41-state-offline (нет интернета)
+        timeout-minutes: 2
+        run: bash tools/shot.sh 41-state-offline -fixture -screen messages -state offline
+
+      - name: Снимки для App Store (6.9 дюйма)
+        timeout-minutes: 8
+        run: bash tools/appstore.sh
+
+      - name: Снимки App Store в артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: appstore-screens
+          path: shots/appstore
+
+      - name: Проверка снимков
+        id: screens
+        run: bash tools/check.sh
+
+      - name: Снимки в ветку
+        if: always()
+        run: |
+          [ -d shots ] || exit 0
+          cd shots
+          git init -q -b shots && git add .
+          git -c user.name=ci -c user.email=ci@disify.dev commit -qm "снимки прогона $GITHUB_RUN_NUMBER (сборка $BUILD_NUMBER)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY.git" shots:shots/$GITHUB_RUN_NUMBER
+
+      - name: Подпись
+        if: steps.screens.outcome == 'success'
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          DIST_P12: ${{ secrets.DIST_P12 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          PROFILES_TGZ: ${{ secrets.PROFILES_TGZ }}
+        run: |
+          set -e
+          KC="$RUNNER_TEMP/sign.keychain-db"; KP=$(uuidgen)
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          echo "$DIST_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC"
+          for D in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$D"; echo "$PROFILES_TGZ" | base64 --decode | tar xz -C "$D"
+          done
+          ls "$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_KEY_CONTENT" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
+
+      - name: Архив
+        if: steps.screens.outcome == 'success'
+        run: |
+          set -o pipefail
+          ruby -ryaml -e '
+            y = YAML.load_file("project.yml")
+            b = y["targets"][ENV["SCHEME"]]["settings"]["base"]
+            b["CODE_SIGN_STYLE"] = "Manual"
+            b["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+            b["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PROFILE_NAME"]
+            File.write("project.yml", y.to_yaml)'
+          xcodegen generate
+          xcodebuild archive -project "$SCHEME.xcodeproj" -scheme "$SCHEME" -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "build/$SCHEME.xcarchive" \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" > build-archive.log 2>&1 || {
+              grep -E "error:|Error:" build-archive.log | sort -u | head -60; tail -40 build-archive.log; exit 1; }
+          echo "архив собран, сборка $BUILD_NUMBER"
+
+      - name: Экспорт .ipa
+        if: steps.screens.outcome == 'success'
+        run: |
+          set -o pipefail
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+          <key>method</key><string>app-store-connect</string>
+          <key>teamID</key><string>$DEVELOPMENT_TEAM</string>
+          <key>signingStyle</key><string>manual</string>
+          <key>signingCertificate</key><string>Apple Distribution</string>
+          <key>uploadSymbols</key><true/>
+          <key>manageAppVersionAndBuildNumber</key><false/>
+          <key>provisioningProfiles</key><dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "build/$SCHEME.xcarchive" -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export 2>&1 | tail -20
+          ls -la build/export
+          cd build/export && unzip -q -o *.ipa && codesign -d --entitlements - --xml Payload/*.app 2>/dev/null | plutil -p - || true
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Payload/*.app/Info.plist
+
+      - name: Загрузка в App Store Connect
+        if: steps.screens.outcome == 'success' && (github.event_name == 'push' || inputs.upload)
+        run: |
+          set -o pipefail
+          xcrun altool --upload-app -f build/export/*.ipa -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --show-progress 2>&1 | tail -25
