@@ -102,38 +102,39 @@ struct LoginView: View {
                 .foregroundStyle(Th.muted)
                 .lineSpacing(4)
                 .padding(.top, 12)
-            ZStack {
-                HStack(spacing: 0) {
-                    ForEach(0..<6, id: \.self) { i in
-                        codeCell(i)
-                        if i < 5 { Spacer(minLength: 4) }
-                    }
+            // Обычное видимое поле: автоподстановка кода из Почты/Сообщений (над клавиатурой) надёжно вставляет только в видимое поле
+            TextField("", text: $code, prompt: Text("000000").foregroundColor(Th.faint))
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focus, equals: .code)
+                .font(Typo.display(30))
+                .kerning(14)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Th.fg)
+                .tint(Th.teal)
+                .frame(maxWidth: .infinity)
+                .frame(height: 64)
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Th.glass2))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(focus == .code ? Th.teal : Th.glassEdge, lineWidth: focus == .code ? 2 : 0.5))
+                .padding(.top, 30)
+                .accessibilityIdentifier("code-field")
+                .onChange(of: code) { _, v in
+                    let digits = Self.extractCode(v)
+                    if digits != v { code = digits }
+                    if digits.count == 6 { verify() }
                 }
-                TextField("", text: $code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .focused($focus, equals: .code)
-                    .foregroundStyle(.clear)
-                    .tint(.clear)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(0.02)
-                    .accessibilityIdentifier("code-field")
-                    .onChange(of: code) { _, v in
-                        let digits = String(v.filter(\.isNumber).prefix(6))
-                        if digits != v { code = digits }
-                        if digits.count == 6 { verify() }
-                    }
-            }
-            .frame(height: 60)
-            .padding(.top, 30)
-            .contentShape(Rectangle())
-            .onTapGesture { focus = .code }
             if let error {
                 Text(error).font(Typo.body(14)).foregroundStyle(Th.danger).padding(.top, 14)
             }
-            Btn(title: "Вставить код из письма", kind: .tonal, wide: true, busy: busy) {
-                if let s = UIPasteboard.general.string { code = String(s.filter(\.isNumber).prefix(6)) }
+            // Системная кнопка вставки: без окна «Разрешить вставку», работает всегда
+            PasteButton(payloadType: String.self) { items in
+                guard let s = items.first else { return }
+                Task { @MainActor in code = Self.extractCode(s) }
             }
+            .labelStyle(.titleAndIcon)
+            .buttonBorderShape(.capsule)
+            .tint(Th.teal)
+            .frame(maxWidth: .infinity)
             .padding(.top, 28)
             Btn(title: "Отправить код ещё раз", kind: .text, wide: true) { requestCode(resend: true) }
                 .padding(.top, 6)
@@ -216,6 +217,14 @@ struct LoginView: View {
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
+    }
+
+    /// Код из вставленного текста: сначала ищем шесть цифр подряд (письмо целиком, «123 456»), иначе первые шесть цифр.
+    static func extractCode(_ s: String) -> String {
+        if let r = s.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(s[r]) }
+        let compact = s.replacingOccurrences(of: #"(\d)[\s\-](?=\d)"#, with: "$1", options: .regularExpression)
+        if let r = compact.range(of: #"(?<!\d)\d{6}(?!\d)"#, options: .regularExpression) { return String(compact[r]) }
+        return String(s.filter(\.isNumber).prefix(6))
     }
 
     private func verify() {
