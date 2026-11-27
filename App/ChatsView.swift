@@ -236,9 +236,9 @@ struct ChatsView: View {
 
     private var footerHint: String {
         if store.chatFolder != "all", let f = store.folder(store.chatFolder), f.id != store.baseFolder?.id {
-            return "Убрать из «\(f.name)» — свайп влево по чату. «Выбрать» сверху — сразу несколько чатов"
+            return "Убрать из «\(f.name)» или переложить в другую папку — свайп влево по чату. «Выбрать» сверху — сразу несколько чатов"
         }
-        return "Вправо по чату — закрепить, влево — без звука, архив, удалить. Удержание — папка и другие действия. Потяни список вниз — архив"
+        return "Вправо по чату — закрепить, влево — папка, без звука, архив, удалить. Потяни список вниз — архив"
     }
 
     private var list: some View {
@@ -386,6 +386,13 @@ struct ChatsView: View {
             Label(conv.isMuted ? "Со звуком" : "Без звука", systemImage: conv.isMuted ? "bell.fill" : "bell.slash.fill")
         }
         .tint(Color(hex: 0xD98E2B))
+        // как в старой версии: папка прямо со свайпа, а в открытой папке ещё и «Убрать»
+        if store.chatFolder != "all" && store.canRemoveFromFolder(conv.contactId) {
+            Button { Task { await store.removeFromFolder(conv.contactId) } } label: { Label("Убрать", systemImage: "folder.badge.minus") }
+                .tint(Pal.rose)
+        }
+        Button { folderSheetFor = conv.contactId } label: { Label("Папка", systemImage: "folder.fill") }
+            .tint(Color(hex: 0x3E7CB1))
     }
 }
 
